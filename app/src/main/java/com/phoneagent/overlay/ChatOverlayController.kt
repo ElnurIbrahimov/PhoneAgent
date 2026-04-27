@@ -72,6 +72,13 @@ class ChatOverlayController(
 
         bindViews(view)
         observeState()
+
+        scope.launch {
+            val models = viewModel.getAllAvailableModels()
+            val adapter = ArrayAdapter(context, android.R.layout.simple_spinner_item, models)
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            modelSpinner?.adapter = adapter
+        }
     }
 
     private fun bindViews(view: View) {
@@ -84,17 +91,14 @@ class ChatOverlayController(
         closeButton = view.findViewById(R.id.close_button)
         minimizeButton = view.findViewById(R.id.minimize_button)
 
-        val models = com.phoneagent.providers.CrofAiDefaults.MODELS
-        val adapter = ArrayAdapter(context, android.R.layout.simple_spinner_item, models)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        modelSpinner?.adapter = adapter
-
         sendButton?.setOnClickListener {
             val message = messageInput?.text?.toString()?.trim()
             if (!message.isNullOrEmpty()) {
-                val selectedModel = modelSpinner?.selectedItem?.toString() ?: models.first()
-                viewModel.sendMessage(message, selectedModel)
-                messageInput?.text?.clear()
+                val selectedModel = modelSpinner?.selectedItem?.toString() ?: ""
+                if (selectedModel.isNotBlank()) {
+                    viewModel.sendMessage(message, selectedModel)
+                    messageInput?.text?.clear()
+                }
             }
         }
 

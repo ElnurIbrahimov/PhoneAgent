@@ -16,6 +16,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -24,8 +25,8 @@ class AgentController(context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val providerRepository = ProviderRepository(context)
-    private val modelRouter = ModelRouter(providerRepository)
     private val secretStore: SecretStore = AndroidKeystoreSecretStore(context)
+    private val modelRouter = ModelRouter(providerRepository, secretStore)
 
     private val database = AppDatabase.getDatabase(context)
     private val memoryRepository = MemoryRepository(database.memoryDao(), database.taskDao())
@@ -149,6 +150,15 @@ class AgentController(context: Context) {
             secretStore.getSecret("api_key_$providerId")
         }
     }
+
+    suspend fun getAllAvailableModels(): List<String> {
+        return providerRepository.providers.first()
+            .filter { it.isEnabled }
+            .flatMap { it.availableModels }
+            .distinct()
+    }
+
+    fun getProviderRepository(): ProviderRepository = providerRepository
 
     fun destroy() {
         scope.cancel()

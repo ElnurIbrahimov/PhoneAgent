@@ -5,9 +5,13 @@ import com.phoneagent.providers.CrofAiDefaults
 import com.phoneagent.providers.OpenAiCompatibleProvider
 import com.phoneagent.providers.ProviderConfig
 import com.phoneagent.providers.ProviderRepository
+import com.phoneagent.security.SecretStore
 import kotlinx.coroutines.flow.first
 
-class ModelRouter(private val providerRepository: ProviderRepository) {
+class ModelRouter(
+    private val providerRepository: ProviderRepository,
+    private val secretStore: SecretStore? = null
+) {
 
     suspend fun getProviderForModel(model: String): AiProvider {
         val providers = providerRepository.providers.first()
@@ -15,12 +19,18 @@ class ModelRouter(private val providerRepository: ProviderRepository) {
             ?: providers.firstOrNull { it.isEnabled }
             ?: CrofAiDefaults.DEFAULT_CONFIG
 
-        return createProvider(providerConfig)
+        return createProvider(injectApiKey(providerConfig))
     }
 
     suspend fun getDefaultProvider(): AiProvider {
         val config = providerRepository.getDefaultProvider()
-        return createProvider(config)
+        return createProvider(injectApiKey(config))
+    }
+
+    private suspend fun injectApiKey(config: ProviderConfig): ProviderConfig {
+        val secretStore = this.secretStore ?: return config
+        val key = secretStore.getSecret("api_key_${config.id}")
+        return if (key != null) config.copy(apiKey = key) else config
     }
 
     private fun createProvider(config: ProviderConfig): AiProvider {

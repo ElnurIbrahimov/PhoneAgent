@@ -173,7 +173,9 @@ fun ProviderSettingsScreen(
                     expanded = modelExpanded,
                     onDismissRequest = { modelExpanded = false }
                 ) {
-                    CrofAiDefaults.MODELS.forEach { model ->
+                    val currentProvider = providers.find { it.id == selectedProviderId }
+                    val availableModels = currentProvider?.availableModels ?: CrofAiDefaults.MODELS
+                    availableModels.forEach { model ->
                         DropdownMenuItem(
                             text = { Text(model) },
                             onClick = {
