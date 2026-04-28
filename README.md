@@ -128,12 +128,12 @@ com.phoneagent
 
 ## Build Instructions
 
-1. Install Android SDK and set `ANDROID_HOME`
+1. Install Android SDK and set `ANDROID_HOME=/opt/android-sdk`
 2. Ensure Java 17 is installed
-3. Run:
-   ```bash
-   ./gradlew build
-   ```
+3. This repo currently uses `settings.gradle.kts` and `build.gradle.kts` and does not include a Gradle wrapper, so run:
+    ```bash
+    gradle assembleDebug
+    ```
 
 ## Permissions
 

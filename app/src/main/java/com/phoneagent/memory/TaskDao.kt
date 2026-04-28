@@ -25,6 +25,9 @@ interface TaskDao {
     @Query("UPDATE tasks SET status = :status, result = :result, completedAt = :completedAt WHERE id = :id")
     suspend fun updateStatus(id: String, status: String, result: String?, completedAt: Long?)
 
+    @Query("UPDATE tasks SET stepsJson = :stepsJson WHERE id = :id")
+    suspend fun updateSteps(id: String, stepsJson: String?)
+
     @Query("DELETE FROM tasks WHERE id = :id")
     suspend fun deleteById(id: String)
 

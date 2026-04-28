@@ -1,7 +1,6 @@
 package com.phoneagent.perception
 
 import android.content.Context
-import android.media.projection.MediaProjection
 
 interface ScreenCaptureManager {
     fun isAvailable(): Boolean
@@ -10,9 +9,7 @@ interface ScreenCaptureManager {
     fun getLastCapture(): ByteArray?
 }
 
-class ScreenCaptureManagerImpl(context: Context) : ScreenCaptureManager {
-
-    private var mediaProjection: MediaProjection? = null
+class ScreenCaptureManagerImpl(@Suppress("UNUSED_PARAMETER") context: Context) : ScreenCaptureManager {
 
     override fun isAvailable(): Boolean {
         // Phase 1: Not implemented

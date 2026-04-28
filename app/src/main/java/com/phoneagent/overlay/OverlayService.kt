@@ -18,7 +18,10 @@ class OverlayService : Service() {
     private val binder = LocalBinder()
     private var bubbleController: FloatingBubbleController? = null
     private var chatController: ChatOverlayController? = null
-    private var agentController: AgentController? = null
+
+    val agentController: AgentController by lazy {
+        PhoneAgentApplication.agentController(this)
+    }
 
     inner class LocalBinder : Binder() {
         fun getService(): OverlayService = this@OverlayService
@@ -26,7 +29,6 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        agentController = AgentController(applicationContext)
         bubbleController = FloatingBubbleController(this) {
             toggleChat()
         }
@@ -67,21 +69,17 @@ class OverlayService : Service() {
         if (chatController?.isShowing() == true) {
             chatController?.hide()
         } else {
-            agentController?.let { agent ->
-                chatController?.destroy()
-                chatController = ChatOverlayController(this, agent)
-                chatController?.show()
-            }
+            chatController?.destroy()
+            chatController = ChatOverlayController(this, agentController)
+            chatController?.show()
         }
     }
 
     fun showChat() {
         if (chatController?.isShowing() != true) {
-            agentController?.let { agent ->
-                chatController?.destroy()
-                chatController = ChatOverlayController(this, agent)
-                chatController?.show()
-            }
+            chatController?.destroy()
+            chatController = ChatOverlayController(this, agentController)
+            chatController?.show()
         }
     }
 
@@ -92,7 +90,6 @@ class OverlayService : Service() {
     override fun onDestroy() {
         chatController?.destroy()
         bubbleController?.hide()
-        agentController?.destroy()
         super.onDestroy()
     }
 

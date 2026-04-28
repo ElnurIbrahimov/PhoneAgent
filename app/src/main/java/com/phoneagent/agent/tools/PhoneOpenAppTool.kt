@@ -1,0 +1,90 @@
+package com.phoneagent.agent.tools
+
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import com.phoneagent.agent.DescribableTool
+import com.phoneagent.agent.Tool
+import org.json.JSONObject
+
+class PhoneOpenAppTool(private val context: Context) : Tool, DescribableTool {
+
+    override val name: String = "phone.open_app"
+    override val description: String = "Open an app by app_name or package_name."
+    override val argsDescription: String = "app_name (String, optional), package_name (String, optional)"
+
+    override suspend fun execute(arguments: Map<String, String>): String {
+        val appName = arguments["app_name"]?.lowercase()?.trim()
+        val packageName = arguments["package_name"]?.trim()
+
+        return try {
+            val pm = context.packageManager
+            val intent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_LAUNCHER)
+            }
+            val activities = pm.queryIntentActivities(intent, 0)
+
+            val matches = activities.filter { resolveInfo ->
+                val label = resolveInfo.loadLabel(pm).toString()
+                val pkg = resolveInfo.activityInfo.packageName
+                (appName != null && label.lowercase().contains(appName)) ||
+                        (packageName != null && pkg == packageName)
+            }
+
+            when {
+                matches.isEmpty() -> {
+                    JSONObject().apply {
+                        put("type", "tool_result")
+                        put("tool", name)
+                        put("success", false)
+                        put("content", JSONObject.NULL)
+                        put("error", "No matching app found.")
+                    }.toString()
+                }
+                matches.size > 1 -> {
+                    val ambiguity = matches.take(5).joinToString(", ") {
+                        "${it.loadLabel(pm)} (${it.activityInfo.packageName})"
+                    }
+                    JSONObject().apply {
+                        put("type", "tool_result")
+                        put("tool", name)
+                        put("success", false)
+                        put("content", JSONObject.NULL)
+                        put("error", "Multiple matches found: $ambiguity. Please specify package_name.")
+                    }.toString()
+                }
+                else -> {
+                    val target = matches.first()
+                    val launchIntent = pm.getLaunchIntentForPackage(target.activityInfo.packageName)
+                    if (launchIntent != null) {
+                        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(launchIntent)
+                        JSONObject().apply {
+                            put("type", "tool_result")
+                            put("tool", name)
+                            put("success", true)
+                            put("content", "Opened ${target.loadLabel(pm)}.")
+                            put("error", JSONObject.NULL)
+                        }.toString()
+                    } else {
+                        JSONObject().apply {
+                            put("type", "tool_result")
+                            put("tool", name)
+                            put("success", false)
+                            put("content", JSONObject.NULL)
+                            put("error", "Could not create launch intent for ${target.activityInfo.packageName}.")
+                        }.toString()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            JSONObject().apply {
+                put("type", "tool_result")
+                put("tool", name)
+                put("success", false)
+                put("content", JSONObject.NULL)
+                put("error", e.message ?: "Unknown error")
+            }.toString()
+        }
+    }
+}

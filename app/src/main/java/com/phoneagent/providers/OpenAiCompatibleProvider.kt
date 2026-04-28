@@ -79,8 +79,18 @@ class OpenAiCompatibleProvider(
         val messages = JSONArray()
         messages.put(JSONObject().apply {
             put("role", "system")
-            put("content", "You are PhoneAgent, a concise Android-native assistant running from the user's phone.")
+            put("content", request.systemPrompt)
         })
+
+        if (!request.history.isNullOrEmpty()) {
+            request.history.forEach { msg ->
+                messages.put(JSONObject().apply {
+                    put("role", msg.role)
+                    put("content", msg.content)
+                })
+            }
+        }
+
         messages.put(JSONObject().apply {
             put("role", "user")
             put("content", request.message)
@@ -89,7 +99,7 @@ class OpenAiCompatibleProvider(
         return JSONObject().apply {
             put("model", request.model)
             put("messages", messages)
-            put("temperature", 0.7)
+            put("temperature", request.temperature)
             put("stream", stream)
         }.toString()
     }

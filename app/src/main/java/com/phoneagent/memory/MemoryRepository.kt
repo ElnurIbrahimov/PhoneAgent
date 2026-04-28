@@ -36,6 +36,10 @@ class MemoryRepository(
         taskDao.updateStatus(id, status, result, if (status == "completed") System.currentTimeMillis() else null)
     }
 
+    suspend fun updateTaskSteps(id: String, stepsJson: String?) {
+        taskDao.updateSteps(id, stepsJson)
+    }
+
     suspend fun getTask(id: String): TaskEntity? {
         return taskDao.getById(id)
     }

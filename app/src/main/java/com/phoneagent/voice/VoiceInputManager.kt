@@ -8,7 +8,7 @@ interface VoiceInputManager {
     fun stopListening()
 }
 
-class VoiceInputManagerImpl(context: Context) : VoiceInputManager {
+class VoiceInputManagerImpl(@Suppress("UNUSED_PARAMETER") context: Context) : VoiceInputManager {
 
     override fun isAvailable(): Boolean {
         // Phase 1: Not implemented

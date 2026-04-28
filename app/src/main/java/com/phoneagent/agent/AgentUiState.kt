@@ -10,5 +10,8 @@ data class AgentUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val currentModel: String = "",
-    val currentProvider: String = ""
+    val currentProvider: String = "",
+    val agentStepStatus: String? = null,
+    val currentSteps: List<AgentStep> = emptyList(),
+    val pendingConfirmation: PendingConfirmation? = null
 )

@@ -8,7 +8,7 @@ interface SpeechOutputManager {
     fun stop()
 }
 
-class SpeechOutputManagerImpl(context: Context) : SpeechOutputManager {
+class SpeechOutputManagerImpl(@Suppress("UNUSED_PARAMETER") context: Context) : SpeechOutputManager {
 
     override fun isAvailable(): Boolean {
         // Phase 1: Not implemented

@@ -10,6 +10,7 @@ data class TaskEntity(
     val description: String,
     val status: String,
     val result: String? = null,
+    val stepsJson: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null
 )

@@ -57,16 +57,25 @@ class AndroidKeystoreSecretStore(context: Context) : SecretStore {
         val ivBase64 = prefs.getString("$key.iv", null) ?: return null
         val dataBase64 = prefs.getString("$key.data", null) ?: return null
 
-        val iv = Base64.decode(ivBase64, Base64.NO_WRAP)
-        val encrypted = Base64.decode(dataBase64, Base64.NO_WRAP)
+        return try {
+            val iv = Base64.decode(ivBase64, Base64.NO_WRAP)
+            val encrypted = Base64.decode(dataBase64, Base64.NO_WRAP)
 
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, getSecretKey(), GCMParameterSpec(128, iv))
-        val decrypted = cipher.doFinal(encrypted)
-        return String(decrypted, Charsets.UTF_8)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, getSecretKey(), GCMParameterSpec(128, iv))
+            val decrypted = cipher.doFinal(encrypted)
+            String(decrypted, Charsets.UTF_8)
+        } catch (_: Exception) {
+            deleteStoredValue(key)
+            null
+        }
     }
 
     override suspend fun deleteSecret(key: String) {
+        deleteStoredValue(key)
+    }
+
+    private fun deleteStoredValue(key: String) {
         prefs.edit().apply {
             remove("$key.iv")
             remove("$key.data")

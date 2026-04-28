@@ -31,13 +31,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.phoneagent.agent.AgentController
 import com.phoneagent.providers.CrofAiDefaults
 import com.phoneagent.providers.ProviderConfig
-import com.phoneagent.providers.ProviderRepository
+import com.phoneagent.providers.ProviderType
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,24 +45,24 @@ fun ProviderSettingsScreen(
     agentController: AgentController,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val providerRepository = remember { ProviderRepository(context) }
+    val providerRepository = remember(agentController) { agentController.getProviderRepository() }
     val providers by providerRepository.providers.collectAsState(initial = emptyList())
 
-    var selectedProviderId by remember { mutableStateOf(CrofAiDefaults.ID) }
+    var selectedProviderId by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
     var baseUrl by remember { mutableStateOf(CrofAiDefaults.BASE_URL) }
     var streamEnabled by remember { mutableStateOf(false) }
-    var selectedModel by remember { mutableStateOf(CrofAiDefaults.MODELS.first()) }
+    var selectedModel by remember { mutableStateOf("") }
 
-    LaunchedEffect(providers) {
-        val provider = providers.find { it.id == selectedProviderId }
-            ?: providers.firstOrNull()
-            ?: return@LaunchedEffect
+    LaunchedEffect(providers, selectedProviderId) {
+        val provider = providers.find { it.id == selectedProviderId } ?: providers.firstOrNull() ?: return@LaunchedEffect
+        if (selectedProviderId != provider.id) {
+            selectedProviderId = provider.id
+        }
         baseUrl = provider.baseUrl
         streamEnabled = provider.streamEnabled
-        selectedModel = provider.defaultModel ?: CrofAiDefaults.MODELS.first()
+        selectedModel = provider.defaultModel ?: provider.availableModels.firstOrNull() ?: ""
         apiKey = agentController.getApiKey(provider.id) ?: ""
     }
 
@@ -100,7 +99,7 @@ fun ProviderSettingsScreen(
                 onExpandedChange = { providerExpanded = it }
             ) {
                 OutlinedTextField(
-                    value = providers.find { it.id == selectedProviderId }?.name ?: "CrofAI",
+                    value = providers.find { it.id == selectedProviderId }?.name ?: providers.firstOrNull()?.name ?: "Loading...",
                     onValueChange = {},
                     readOnly = true,
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = providerExpanded) },
@@ -117,9 +116,6 @@ fun ProviderSettingsScreen(
                             text = { Text(provider.name) },
                             onClick = {
                                 selectedProviderId = provider.id
-                                baseUrl = provider.baseUrl
-                                streamEnabled = provider.streamEnabled
-                                selectedModel = provider.defaultModel ?: CrofAiDefaults.MODELS.first()
                                 providerExpanded = false
                             }
                         )
@@ -206,13 +202,15 @@ fun ProviderSettingsScreen(
             Button(
                 onClick = {
                     scope.launch {
+                        val existing = providers.find { it.id == selectedProviderId }
                         val updatedConfig = ProviderConfig(
                             id = selectedProviderId,
-                            name = providers.find { it.id == selectedProviderId }?.name ?: CrofAiDefaults.NAME,
-                            type = com.phoneagent.providers.ProviderType.OPENAI_COMPATIBLE,
+                            name = existing?.name ?: CrofAiDefaults.NAME,
+                            type = existing?.type ?: ProviderType.OPENAI_COMPATIBLE,
                             baseUrl = baseUrl,
-                            defaultModel = selectedModel,
-                            availableModels = CrofAiDefaults.MODELS,
+                            apiKey = existing?.apiKey,
+                            defaultModel = selectedModel.ifBlank { null },
+                            availableModels = existing?.availableModels ?: CrofAiDefaults.MODELS,
                             isEnabled = true,
                             streamEnabled = streamEnabled
                         )
@@ -220,6 +218,7 @@ fun ProviderSettingsScreen(
                         agentController.storeApiKey(selectedProviderId, apiKey)
                     }
                 },
+                enabled = selectedProviderId.isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Save Settings")

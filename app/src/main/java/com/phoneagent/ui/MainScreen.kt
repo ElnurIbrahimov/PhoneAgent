@@ -1,5 +1,6 @@
 package com.phoneagent.ui
 
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -19,12 +20,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.phoneagent.agent.AgentController
+import com.phoneagent.browser.AgentBrowserActivity
 import com.phoneagent.overlay.OverlayService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    agentController: AgentController,
+    @Suppress("UNUSED_PARAMETER") agentController: AgentController,
     onNavigateToSettings: () -> Unit,
     onNavigateToPermissions: () -> Unit,
     onNavigateToChat: () -> Unit
@@ -80,6 +82,18 @@ fun MainScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Open Chat")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    val intent = Intent(context, AgentBrowserActivity::class.java)
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Open Agent Browser")
             }
 
             Spacer(modifier = Modifier.height(16.dp))

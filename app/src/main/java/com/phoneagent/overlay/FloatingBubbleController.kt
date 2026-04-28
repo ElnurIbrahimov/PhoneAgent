@@ -85,7 +85,7 @@ class FloatingBubbleController(
 
     fun hide() {
         bubbleView?.let {
-            windowManager.removeView(it)
+            runCatching { windowManager.removeView(it) }
             bubbleView = null
         }
     }

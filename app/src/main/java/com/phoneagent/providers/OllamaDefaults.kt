@@ -15,7 +15,7 @@ object OllamaDefaults {
     val DEFAULT_CONFIG = ProviderConfig(
         id = ID,
         name = NAME,
-        type = ProviderType.OPENAI_COMPATIBLE,
+        type = ProviderType.OLLAMA,
         baseUrl = BASE_URL,
         defaultModel = "minimax-m2.7",
         availableModels = MODELS,

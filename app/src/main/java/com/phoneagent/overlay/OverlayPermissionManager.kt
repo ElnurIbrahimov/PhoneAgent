@@ -1,6 +1,5 @@
 package com.phoneagent.overlay
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -13,16 +12,11 @@ object OverlayPermissionManager {
         return Settings.canDrawOverlays(context)
     }
 
-    fun requestOverlayPermission(activity: Activity, requestCode: Int = REQUEST_CODE) {
-        if (!canDrawOverlays(activity)) {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:${activity.packageName}")
-            )
-            activity.startActivityForResult(intent, requestCode)
-        } else {
-            Toast.makeText(activity, "Overlay permission already granted", Toast.LENGTH_SHORT).show()
-        }
+    fun createOverlayPermissionIntent(context: Context): Intent {
+        return Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}")
+        )
     }
 
     fun handleOverlayPermissionResult(context: Context) {
@@ -32,6 +26,4 @@ object OverlayPermissionManager {
             Toast.makeText(context, "Overlay permission denied", Toast.LENGTH_SHORT).show()
         }
     }
-
-    const val REQUEST_CODE = 1001
 }

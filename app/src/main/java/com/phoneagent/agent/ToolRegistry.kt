@@ -23,4 +23,8 @@ class ToolRegistry {
     fun listTools(): List<Tool> = tools.values.toList()
 
     fun clear() = tools.clear()
+
+    fun registerAll(toolsList: List<Tool>) {
+        toolsList.forEach { register(it) }
+    }
 }

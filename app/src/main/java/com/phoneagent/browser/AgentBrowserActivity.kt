@@ -1,4 +1,4 @@
-package com.phoneagent
+package com.phoneagent.browser
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -7,17 +7,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.phoneagent.agent.AgentController
-import com.phoneagent.ui.AppRoot
 
-class MainActivity : ComponentActivity() {
-
-    private val agentController: AgentController by lazy {
-        PhoneAgentApplication.agentController(this)
-    }
+class AgentBrowserActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val url = intent.getStringExtra("url") ?: "https://www.google.com"
 
         setContent {
             MaterialTheme {
@@ -25,7 +21,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppRoot(agentController = agentController)
+                    AgentWebView(
+                        modifier = Modifier.fillMaxSize(),
+                        initialUrl = url
+                    )
                 }
             }
         }
@@ -33,6 +32,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Do not destroy the shared controller here — it lives for the app lifecycle.
+        if (!isChangingConfigurations) {
+            BrowserSessionManager.clear()
+        }
     }
 }

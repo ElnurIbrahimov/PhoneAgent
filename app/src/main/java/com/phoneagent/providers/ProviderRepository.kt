@@ -18,8 +18,14 @@ class ProviderRepository(private val context: Context) {
 
     private val providersKey = stringPreferencesKey("providers")
 
+    private val defaultProviders = listOf(
+        CrofAiDefaults.DEFAULT_CONFIG,
+        OllamaDefaults.DEFAULT_CONFIG,
+        OpenCodeGoDefaults.DEFAULT_CONFIG
+    )
+
     val providers: Flow<List<ProviderConfig>> = context.dataStore.data.map { prefs ->
-        val json = prefs[providersKey] ?: return@map listOf(CrofAiDefaults.DEFAULT_CONFIG, OllamaDefaults.DEFAULT_CONFIG)
+        val json = prefs[providersKey] ?: return@map defaultProviders
         parseProvidersJson(json)
     }
 
@@ -51,7 +57,7 @@ class ProviderRepository(private val context: Context) {
     suspend fun initializeDefaults() {
         context.dataStore.edit { prefs ->
             if (prefs[providersKey] == null) {
-                prefs[providersKey] = providersToJson(listOf(CrofAiDefaults.DEFAULT_CONFIG, OllamaDefaults.DEFAULT_CONFIG))
+                prefs[providersKey] = providersToJson(defaultProviders)
             }
         }
     }
@@ -76,7 +82,7 @@ class ProviderRepository(private val context: Context) {
                 )
             }
         } catch (e: Exception) {
-            listOf(CrofAiDefaults.DEFAULT_CONFIG)
+            defaultProviders
         }
     }
 

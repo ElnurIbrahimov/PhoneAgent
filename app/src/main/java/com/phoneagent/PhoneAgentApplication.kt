@@ -5,12 +5,17 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import com.phoneagent.agent.AgentController
 
 class PhoneAgentApplication : Application() {
+
+    lateinit var agentController: AgentController
+        private set
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        agentController = AgentController(this)
     }
 
     private fun createNotificationChannel() {
@@ -29,5 +34,9 @@ class PhoneAgentApplication : Application() {
 
     companion object {
         const val CHANNEL_ID = "phoneagent_overlay_channel"
+
+        fun agentController(context: Context): AgentController {
+            return (context.applicationContext as PhoneAgentApplication).agentController
+        }
     }
 }

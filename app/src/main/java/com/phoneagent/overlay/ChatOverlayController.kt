@@ -4,18 +4,20 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
 import android.view.Gravity
+import android.content.Intent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
+import com.phoneagent.MainActivity
 import com.phoneagent.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +46,7 @@ class ChatOverlayController(
     private var errorText: TextView? = null
     private var closeButton: Button? = null
     private var minimizeButton: Button? = null
+    private var hasLaunchedMainActivity = false
 
     fun show() {
         if (chatView != null) return
@@ -115,6 +118,22 @@ class ChatOverlayController(
         scope.launch {
             viewModel.uiState.collectLatest { state ->
                 updateUI(state)
+
+                if (state.pendingConfirmation != null && !hasLaunchedMainActivity) {
+                    hasLaunchedMainActivity = true
+                    Toast.makeText(
+                        context,
+                        "Sensitive action requires approval. Opening PhoneAgent...",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    hide()
+                    val intent = Intent(context, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                } else if (state.pendingConfirmation == null) {
+                    hasLaunchedMainActivity = false
+                }
             }
         }
     }
@@ -129,8 +148,21 @@ class ChatOverlayController(
         chatContent?.text = messages
 
         loadingIndicator?.visibility = if (state.isLoading) View.VISIBLE else View.GONE
-        errorText?.visibility = if (state.error != null) View.VISIBLE else View.GONE
-        errorText?.text = state.error
+
+        if (state.error != null) {
+            errorText?.visibility = View.VISIBLE
+            errorText?.text = state.error
+        } else if (state.agentStepStatus != null) {
+            errorText?.visibility = View.VISIBLE
+            errorText?.text = state.agentStepStatus
+        } else {
+            errorText?.visibility = View.GONE
+            errorText?.text = null
+        }
+
+        val inputEnabled = !state.isLoading && state.pendingConfirmation == null
+        messageInput?.isEnabled = inputEnabled
+        sendButton?.isEnabled = inputEnabled
 
         val scrollView = chatView?.findViewById<ScrollView>(R.id.chat_scroll)
         scrollView?.post {
@@ -140,7 +172,7 @@ class ChatOverlayController(
 
     fun hide() {
         chatView?.let {
-            windowManager.removeView(it)
+            runCatching { windowManager.removeView(it) }
             chatView = null
         }
     }
