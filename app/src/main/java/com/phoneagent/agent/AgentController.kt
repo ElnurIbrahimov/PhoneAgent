@@ -1,14 +1,36 @@
 package com.phoneagent.agent
 
 import android.content.Context
+import com.phoneagent.agent.tools.AccessibilityBackTool
+import com.phoneagent.agent.tools.AccessibilityForegroundTool
+import com.phoneagent.agent.tools.AccessibilityHomeTool
+import com.phoneagent.agent.tools.AccessibilityReadTreeTool
+import com.phoneagent.agent.tools.AccessibilitySwipeTool
+import com.phoneagent.agent.tools.AccessibilityTapAtTool
+import com.phoneagent.agent.tools.AccessibilityTapTextTool
+import com.phoneagent.agent.tools.AccessibilityTypeTool
 import com.phoneagent.agent.tools.BrowserActionTool
+import com.phoneagent.agent.tools.PhoneCallTool
+import com.phoneagent.agent.tools.PhoneClipboardTool
 import com.phoneagent.agent.tools.PhoneListAppsTool
+import com.phoneagent.agent.tools.PhoneNotificationsTool
 import com.phoneagent.agent.tools.PhoneOpenAppTool
+import com.phoneagent.agent.tools.PhoneScreenshotTool
+import com.phoneagent.agent.tools.PhoneSendSmsTool
+import com.phoneagent.agent.tools.PhoneSettingsTool
 import com.phoneagent.agent.tools.PhoneSystemInfoTool
 import com.phoneagent.browser.BrowserTool
 import com.phoneagent.overlay.OverlayState
 import com.phoneagent.memory.AppDatabase
 import com.phoneagent.memory.MemoryRepository
+import com.phoneagent.perception.OcrManager
+import com.phoneagent.perception.OcrManagerImpl
+import com.phoneagent.voice.SpeechOutputManager
+import com.phoneagent.voice.SpeechOutputManagerImpl
+import com.phoneagent.voice.VoiceInputManager
+import com.phoneagent.voice.VoiceInputManagerImpl
+import com.phoneagent.perception.ScreenCaptureManager
+import com.phoneagent.perception.ScreenCaptureManagerImpl
 import com.phoneagent.providers.ProviderRepository
 import com.phoneagent.security.AndroidKeystoreSecretStore
 import com.phoneagent.security.SecretStore
@@ -43,15 +65,43 @@ class AgentController(context: Context) {
 
     val toolRegistry = ToolRegistry()
 
+    private val screenCaptureManager: ScreenCaptureManager = ScreenCaptureManagerImpl(context)
+    private val ocrManager: OcrManager = OcrManagerImpl()
+
+    private val voiceInputManager: VoiceInputManager = VoiceInputManagerImpl(context)
+    private val speechOutputManager: SpeechOutputManager = SpeechOutputManagerImpl(context)
+
+    var onVoiceResult: ((String) -> Unit)? = null
+    var onVoiceError: ((String) -> Unit)? = null
+
     private val loopExecutor: AgentLoopExecutor
+    @Volatile
+    private var loopRunning = false
 
     init {
         val browserTool = BrowserTool(context)
         toolRegistry.registerAll(
             listOf(
+                // Phone system tools
                 PhoneListAppsTool(context),
                 PhoneOpenAppTool(context),
                 PhoneSystemInfoTool(context),
+                PhoneScreenshotTool(screenCaptureManager, ocrManager),
+                PhoneNotificationsTool(),
+                PhoneClipboardTool(context),
+                PhoneSettingsTool(context),
+                PhoneSendSmsTool(),
+                PhoneCallTool(context),
+                // Accessibility tools
+                AccessibilityReadTreeTool(),
+                AccessibilityTapTextTool(),
+                AccessibilityTapAtTool(),
+                AccessibilitySwipeTool(),
+                AccessibilityTypeTool(),
+                AccessibilityBackTool(),
+                AccessibilityHomeTool(),
+                AccessibilityForegroundTool(),
+                // Browser tools
                 BrowserActionTool("browser.open_url", "Open a URL in the agent browser.", browserTool, "open_url", "url (String)"),
                 BrowserActionTool("browser.read_page", "Read the text content of the current browser page.", browserTool, "read_page", ""),
                 BrowserActionTool("browser.read_metadata", "Read page metadata including title, URL, links, buttons, and inputs.", browserTool, "read_metadata", ""),
@@ -69,7 +119,8 @@ class AgentController(context: Context) {
             modelRouter = modelRouter,
             toolRegistry = toolRegistry,
             taskHistoryManager = taskHistoryManager,
-            applyState = { block -> _uiState.update(block) }
+            applyState = { block -> _uiState.update(block) },
+            screenCaptureManager = screenCaptureManager
         )
 
         scope.launch {
@@ -91,6 +142,12 @@ class AgentController(context: Context) {
             return
         }
 
+        if (loopRunning) {
+            _uiState.update { it.copy(error = "Agent is busy. Wait for current task to complete.") }
+            return
+        }
+        loopRunning = true
+
         _uiState.update {
             it.copy(
                 messages = it.messages + ChatMessage("user", message),
@@ -106,23 +163,27 @@ class AgentController(context: Context) {
         loopExecutor.startLoop(
             message = message,
             model = selectedModel,
-            systemPrompt = systemPrompt
+            systemPrompt = systemPrompt,
+            onComplete = { loopRunning = false }
         )
     }
 
     fun approvePendingAction() {
         val pending = _uiState.value.pendingConfirmation ?: return
         _uiState.update { it.copy(pendingConfirmation = null) }
-        loopExecutor.resumeAfterConfirmation(pending, approved = true)
+        loopRunning = true
+        loopExecutor.resumeAfterConfirmation(pending, approved = true, onComplete = { loopRunning = false })
     }
 
     fun cancelPendingAction() {
         val pending = _uiState.value.pendingConfirmation ?: return
         _uiState.update { it.copy(pendingConfirmation = null) }
-        loopExecutor.resumeAfterConfirmation(pending, approved = false)
+        loopRunning = true
+        loopExecutor.resumeAfterConfirmation(pending, approved = false, onComplete = { loopRunning = false })
     }
 
     fun clearChat() {
+        loopRunning = false
         _uiState.update {
             it.copy(
                 messages = emptyList(),
@@ -163,8 +224,39 @@ class AgentController(context: Context) {
 
     fun getProviderRepository(): ProviderRepository = providerRepository
 
+    fun getScreenCaptureManager(): ScreenCaptureManager = screenCaptureManager
+
+    fun startVoiceInput() {
+        if (!voiceInputManager.isAvailable()) {
+            _uiState.update { it.copy(error = "Voice input not available on this device") }
+            return
+        }
+        voiceInputManager.startListening(
+            onResult = { text ->
+                onVoiceResult?.invoke(text)
+                if (text.isNotBlank()) sendMessage(text)
+            },
+            onError = { error ->
+                onVoiceError?.invoke(error)
+                _uiState.update { it.copy(error = error) }
+            }
+        )
+    }
+
+    fun stopVoiceInput() {
+        voiceInputManager.stopListening()
+    }
+
+    fun speakResponse(text: String) {
+        if (speechOutputManager.isAvailable()) {
+            speechOutputManager.speak(text)
+        }
+    }
+
     fun destroy() {
         scope.cancel()
         loopExecutor.destroy()
+        (ocrManager as? OcrManagerImpl)?.close()
+        speechOutputManager.shutdown()
     }
 }

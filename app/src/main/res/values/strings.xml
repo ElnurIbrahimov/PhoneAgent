@@ -4,4 +4,6 @@
     <string name="channel_description">Foreground notification for PhoneAgent overlay service</string>
     <string name="overlay_notification_title">PhoneAgent is running</string>
     <string name="overlay_notification_text">Tap to open settings</string>
+    <string name="notification_listener_description">Allows PhoneAgent to read notifications for AI assistance</string>
+    <string name="accessibility_service_description">Allows PhoneAgent to read screen content and perform gestures for AI-driven assistance</string>
 </resources>

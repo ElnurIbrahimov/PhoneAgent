@@ -17,7 +17,7 @@ object OpenCodeGoDefaults {
         baseUrl = BASE_URL,
         defaultModel = MODELS.first(),
         availableModels = MODELS,
-        isEnabled = true,
+        isEnabled = false,
         streamEnabled = false
     )
 }

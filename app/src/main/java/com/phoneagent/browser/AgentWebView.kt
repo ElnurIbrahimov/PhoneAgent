@@ -1,6 +1,7 @@
 package com.phoneagent.browser
 
 import android.annotation.SuppressLint
+import androidx.compose.runtime.DisposableEffect
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
@@ -18,10 +19,20 @@ fun AgentWebView(
     initialUrl: String = "https://www.google.com",
     onPageLoaded: ((String?) -> Unit)? = null
 ) {
+    var webViewRef: WebView? = null
+
+    DisposableEffect(Unit) {
+        onDispose {
+            webViewRef?.destroy()
+            webViewRef = null
+            BrowserSessionManager.clear()
+        }
+    }
+
     AndroidView(
         modifier = modifier,
         factory = { context ->
-            WebView(context).apply {
+            WebView(context).also { webViewRef = it }.apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
@@ -30,17 +41,17 @@ fun AgentWebView(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    databaseEnabled = true
                     loadsImagesAutomatically = true
                     useWideViewPort = true
                     loadWithOverviewMode = true
                 }
 
-                val cookieManager = CookieManager.getInstance()
-                cookieManager.setAcceptCookie(true)
-                cookieManager.setAcceptThirdPartyCookies(this, true)
-
                 webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                        request?.url?.let { view?.loadUrl(it.toString()) }
+                        return true
+                    }
+
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
                         onPageLoaded?.invoke(url)

@@ -90,6 +90,7 @@ class OverlayService : Service() {
     override fun onDestroy() {
         chatController?.destroy()
         bubbleController?.hide()
+        stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
 

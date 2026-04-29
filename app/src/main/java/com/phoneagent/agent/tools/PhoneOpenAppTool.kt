@@ -39,6 +39,7 @@ class PhoneOpenAppTool(private val context: Context) : Tool, DescribableTool {
                         put("success", false)
                         put("content", JSONObject.NULL)
                         put("error", "No matching app found.")
+                        put("suggestion", "Use phone.list_apps to see installed apps.")
                     }.toString()
                 }
                 matches.size > 1 -> {
@@ -51,6 +52,7 @@ class PhoneOpenAppTool(private val context: Context) : Tool, DescribableTool {
                         put("success", false)
                         put("content", JSONObject.NULL)
                         put("error", "Multiple matches found: $ambiguity. Please specify package_name.")
+                        put("suggestion", "Specify a more precise package_name from the list.")
                     }.toString()
                 }
                 else -> {
@@ -73,6 +75,7 @@ class PhoneOpenAppTool(private val context: Context) : Tool, DescribableTool {
                             put("success", false)
                             put("content", JSONObject.NULL)
                             put("error", "Could not create launch intent for ${target.activityInfo.packageName}.")
+                            put("suggestion", "Use phone.list_apps to verify the app is installed.")
                         }.toString()
                     }
                 }
@@ -84,6 +87,7 @@ class PhoneOpenAppTool(private val context: Context) : Tool, DescribableTool {
                 put("success", false)
                 put("content", JSONObject.NULL)
                 put("error", e.message ?: "Unknown error")
+                put("suggestion", "Use phone.list_apps to see installed apps.")
             }.toString()
         }
     }

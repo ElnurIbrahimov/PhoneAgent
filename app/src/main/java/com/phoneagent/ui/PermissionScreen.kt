@@ -1,9 +1,10 @@
 package com.phoneagent.ui
 
 import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -22,46 +24,27 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.phoneagent.overlay.OverlayPermissionManager
+import androidx.core.content.PermissionChecker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PermissionScreen(onBack: () -> Unit) {
+fun PermissionScreen(
+    onBack: () -> Unit,
+    onRequestPermissions: (Array<String>) -> Unit = {}
+) {
     val context = LocalContext.current
-    var overlayGranted by remember { mutableStateOf(OverlayPermissionManager.canDrawOverlays(context)) }
-    var notificationsGranted by remember {
-        mutableStateOf(
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    val overlayLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        overlayGranted = OverlayPermissionManager.canDrawOverlays(context)
-        OverlayPermissionManager.handleOverlayPermissionResult(context)
-    }
-
-    val notificationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        notificationsGranted = granted
-    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Permissions") },
                 navigationIcon = {
-                    Button(onClick = onBack) {
-                        Text("Back")
-                    }
+                    Button(onClick = onBack) { Text("Back") }
                 }
             )
         }
@@ -71,54 +54,107 @@ fun PermissionScreen(onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.Top,
-            horizontalAlignment = Alignment.Start
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "Required Permissions",
-                style = MaterialTheme.typography.headlineSmall
+            Text("Required Permissions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            PermissionRow(
+                label = "Overlay (Draw over apps)",
+                granted = android.provider.Settings.canDrawOverlays(context),
+                onRequest = {
+                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                    }
+                    context.startActivity(intent)
+                }
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("Overlay Permission: ${if (overlayGranted) "Granted" else "Required"}")
-
-            if (!overlayGranted) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        val intent = OverlayPermissionManager.createOverlayPermissionIntent(context)
-                        overlayLauncher.launch(intent)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Request Overlay Permission")
+            PermissionRow(
+                label = "Accessibility Service",
+                granted = isAccessibilityServiceEnabled(context),
+                onRequest = {
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }
-            }
+            )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            PermissionRow(
+                label = "Microphone (Voice input)",
+                granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PermissionChecker.PERMISSION_GRANTED,
+                onRequest = { onRequestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO)) }
+            )
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                Text("Notification Permission: ${if (notificationsGranted) "Granted" else "Required"}")
-                if (!notificationsGranted) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Request Notification Permission")
-                    }
+            PermissionRow(
+                label = "SMS (Send messages)",
+                granted = ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PermissionChecker.PERMISSION_GRANTED,
+                onRequest = { onRequestPermissions(arrayOf(Manifest.permission.SEND_SMS)) }
+            )
+
+            PermissionRow(
+                label = "Phone (Make calls)",
+                granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PermissionChecker.PERMISSION_GRANTED,
+                onRequest = { onRequestPermissions(arrayOf(Manifest.permission.CALL_PHONE)) }
+            )
+
+            PermissionRow(
+                label = "Notifications (Listener)",
+                granted = isNotificationListenerEnabled(context),
+                onRequest = {
+                    context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                 }
-            }
+            )
 
-            Spacer(modifier = Modifier.height(32.dp))
-
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "PhoneAgent needs overlay permission to display the floating bubble and chat interface above other apps.",
-                style = MaterialTheme.typography.bodyMedium
+                "After enabling a permission, you may need to restart the app.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
+}
+
+@Composable
+private fun PermissionRow(label: String, granted: Boolean, onRequest: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "$label: ${if (granted) "GRANTED" else "NOT GRANTED"}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            fontWeight = if (granted) FontWeight.Normal else FontWeight.Bold
+        )
+        if (!granted) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Button(
+                onClick = onRequest,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                )
+            ) {
+                Text("Enable")
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+private fun isAccessibilityServiceEnabled(context: Context): Boolean {
+    val service = "${context.packageName}/com.phoneagent.accessibility.AgentAccessibilityService"
+    return try {
+        val enabledServices = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: ""
+        enabledServices.contains(service)
+    } catch (e: Exception) {
+        false
+    }
+}
+
+private fun isNotificationListenerEnabled(context: Context): Boolean {
+    val enabledListeners = Settings.Secure.getString(
+        context.contentResolver,
+        "enabled_notification_listeners"
+    ) ?: ""
+    return enabledListeners.contains(context.packageName)
 }

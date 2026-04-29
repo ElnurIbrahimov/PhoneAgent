@@ -55,7 +55,7 @@ fun ProviderSettingsScreen(
     var streamEnabled by remember { mutableStateOf(false) }
     var selectedModel by remember { mutableStateOf("") }
 
-    LaunchedEffect(providers, selectedProviderId) {
+    LaunchedEffect(selectedProviderId) {
         val provider = providers.find { it.id == selectedProviderId } ?: providers.firstOrNull() ?: return@LaunchedEffect
         if (selectedProviderId != provider.id) {
             selectedProviderId = provider.id

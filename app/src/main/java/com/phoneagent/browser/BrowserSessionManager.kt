@@ -6,44 +6,44 @@ import java.lang.ref.WeakReference
 object BrowserSessionManager {
 
     private var activeWebView: WeakReference<WebView>? = null
-    @Volatile
-    private var isActive = false
 
+    @Synchronized
     fun setActiveWebView(webView: WebView) {
         activeWebView = WeakReference(webView)
-        isActive = true
     }
 
+    @Synchronized
     fun getActiveWebView(): WebView? {
-        val webView = activeWebView?.get()
-        if (webView == null) {
-            clear()
-        }
-        return webView
+        return activeWebView?.get()
     }
 
+    @Synchronized
     fun hasActiveBrowser(): Boolean {
-        return isActive && activeWebView?.get() != null
+        return activeWebView?.get() != null
     }
 
+    @Synchronized
     fun openUrl(url: String) {
         getActiveWebView()?.loadUrl(url)
     }
 
+    @Synchronized
     fun canGoBack(): Boolean {
         return getActiveWebView()?.canGoBack() ?: false
     }
 
+    @Synchronized
     fun goBack() {
         getActiveWebView()?.goBack()
     }
 
+    @Synchronized
     fun reload() {
         getActiveWebView()?.reload()
     }
 
+    @Synchronized
     fun clear() {
         activeWebView = null
-        isActive = false
     }
 }

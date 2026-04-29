@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -14,12 +16,29 @@ import javax.crypto.spec.GCMParameterSpec
 class AndroidKeystoreSecretStore(context: Context) : SecretStore {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
-    init {
-        if (!keyStore.containsAlias(KEY_ALIAS)) {
-            generateKey()
+    private var keyStore: KeyStore? = null
+    private var initialized = false
+
+    @Synchronized
+    private fun ensureInitialized(): Boolean {
+        if (initialized) return keyStore != null
+        initialized = true
+        keyStore = runCatching {
+            KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        }.getOrNull()
+        if (keyStore != null && !keyStore!!.containsAlias(KEY_ALIAS)) {
+            runCatching { generateKey() }
         }
+        return keyStore != null
+    }
+
+    fun isAvailable(): Boolean {
+        return ensureInitialized()
+    }
+
+    private fun requireKeyStore(): KeyStore {
+        return keyStore ?: throw IllegalStateException("Android Keystore is unavailable")
     }
 
     private fun generateKey() {
@@ -37,10 +56,12 @@ class AndroidKeystoreSecretStore(context: Context) : SecretStore {
     }
 
     private fun getSecretKey(): SecretKey {
-        return (keyStore.getEntry(KEY_ALIAS, null) as KeyStore.SecretKeyEntry).secretKey
+        val ks = requireKeyStore()
+        return (ks.getEntry(KEY_ALIAS, null) as KeyStore.SecretKeyEntry).secretKey
     }
 
-    override suspend fun storeSecret(key: String, value: String) {
+    override suspend fun storeSecret(key: String, value: String) = withContext(Dispatchers.Default) {
+        if (!ensureInitialized()) return@withContext
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getSecretKey())
         val iv = cipher.iv
@@ -51,13 +72,15 @@ class AndroidKeystoreSecretStore(context: Context) : SecretStore {
             putString("$key.data", Base64.encodeToString(encrypted, Base64.NO_WRAP))
             apply()
         }
+        Unit
     }
 
-    override suspend fun getSecret(key: String): String? {
-        val ivBase64 = prefs.getString("$key.iv", null) ?: return null
-        val dataBase64 = prefs.getString("$key.data", null) ?: return null
+    override suspend fun getSecret(key: String): String? = withContext(Dispatchers.Default) {
+        if (!ensureInitialized()) return@withContext null
+        val ivBase64 = prefs.getString("$key.iv", null) ?: return@withContext null
+        val dataBase64 = prefs.getString("$key.data", null) ?: return@withContext null
 
-        return try {
+        return@withContext try {
             val iv = Base64.decode(ivBase64, Base64.NO_WRAP)
             val encrypted = Base64.decode(dataBase64, Base64.NO_WRAP)
 
@@ -65,13 +88,14 @@ class AndroidKeystoreSecretStore(context: Context) : SecretStore {
             cipher.init(Cipher.DECRYPT_MODE, getSecretKey(), GCMParameterSpec(128, iv))
             val decrypted = cipher.doFinal(encrypted)
             String(decrypted, Charsets.UTF_8)
-        } catch (_: Exception) {
-            deleteStoredValue(key)
+        } catch (e: Exception) {
+            android.util.Log.e("SecretStore", "Failed to decrypt secret for key: $key", e)
             null
         }
     }
 
-    override suspend fun deleteSecret(key: String) {
+    override suspend fun deleteSecret(key: String) = withContext(Dispatchers.Default) {
+        if (!ensureInitialized()) return@withContext
         deleteStoredValue(key)
     }
 
@@ -83,8 +107,9 @@ class AndroidKeystoreSecretStore(context: Context) : SecretStore {
         }
     }
 
-    override suspend fun hasSecret(key: String): Boolean {
-        return prefs.contains("$key.iv") && prefs.contains("$key.data")
+    override suspend fun hasSecret(key: String): Boolean = withContext(Dispatchers.Default) {
+        if (!ensureInitialized()) return@withContext false
+        return@withContext prefs.contains("$key.iv") && prefs.contains("$key.data")
     }
 
     companion object {

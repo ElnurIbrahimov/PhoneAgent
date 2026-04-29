@@ -50,7 +50,10 @@ object PageExtractor {
                     url: window.location.href || '',
                     links: links,
                     buttons: buttons,
-                    inputs: inputs
+                    inputs: inputs,
+                    totalLinks: linkEls.length,
+                    totalButtons: btnEls.length,
+                    totalInputs: inputEls.length
                 };
             })();
         """.trimIndent()
@@ -94,7 +97,10 @@ object PageExtractor {
                     excerpt: excerpt,
                     links: links,
                     buttons: buttons,
-                    inputs: inputs
+                    inputs: inputs,
+                    totalLinks: linkEls.length,
+                    totalButtons: btnEls.length,
+                    totalInputs: inputEls.length
                 };
             })();
         """.trimIndent()

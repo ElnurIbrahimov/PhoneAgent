@@ -25,7 +25,6 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "phoneagent_database"
                 )
-                .fallbackToDestructiveMigration()
                 .build()
                 INSTANCE = instance
                 instance

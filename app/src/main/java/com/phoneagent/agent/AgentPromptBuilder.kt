@@ -1,5 +1,7 @@
 package com.phoneagent.agent
 
+import org.json.JSONObject
+
 object AgentPromptBuilder {
 
     fun buildSystemPrompt(tools: List<Tool>): String {
@@ -40,6 +42,8 @@ Rules:
 - Do not output natural language outside the JSON object.
 - If a tool fails, you may try a different approach up to the step limit.
 - If the user cancels an action, provide a final_answer explaining what happened.
+- If a tool fails, read its "suggestion" field and try that approach.
+- Never retry the exact same action more than twice.
         """.trimIndent()
     }
 
@@ -57,16 +61,26 @@ Rules:
                 when (step.action) {
                     is AgentAction.ToolCall -> {
                         sb.appendLine("Action: {\"type\":\"tool_call\",\"tool\":\"${step.action.tool}\",\"args\":${step.action.args}}")
-                        val obs = step.observation?.take(4000) ?: "none"
-                        sb.appendLine("Observation: $obs")
+                        val rawObs = step.observation ?: "none"
+                        val suggestion = extractSuggestion(rawObs)
+                        val obsText = rawObs.take(4000)
+                        sb.appendLine("Observation: $obsText")
+                        if (suggestion != null) {
+                            sb.appendLine("Suggestion: $suggestion")
+                        }
                     }
                     is AgentAction.FinalAnswer -> {
                         sb.appendLine("Action: {\"type\":\"final_answer\",\"content\":\"${step.action.content}\"}")
                     }
                     is AgentAction.ParseError -> {
                         sb.appendLine("Action: (parse error: ${step.action.reason})")
-                        val obs = step.observation?.take(4000) ?: "none"
-                        sb.appendLine("Observation: $obs")
+                        val rawObs = step.observation ?: "none"
+                        val suggestion = extractSuggestion(rawObs)
+                        val obsText = rawObs.take(4000)
+                        sb.appendLine("Observation: $obsText")
+                        if (suggestion != null) {
+                            sb.appendLine("Suggestion: $suggestion")
+                        }
                     }
                 }
                 sb.appendLine()
@@ -74,6 +88,13 @@ Rules:
         }
         sb.appendLine("Respond with the next JSON action.")
         return sb.toString()
+    }
+
+    private fun extractSuggestion(jsonString: String): String? {
+        return try {
+            val json = org.json.JSONObject(jsonString)
+            json.optString("suggestion", null)
+        } catch (_: Exception) { null }
     }
 }
 

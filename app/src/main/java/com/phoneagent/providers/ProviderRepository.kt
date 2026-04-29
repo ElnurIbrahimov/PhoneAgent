@@ -35,7 +35,11 @@ class ProviderRepository(private val context: Context) {
 
     suspend fun saveProvider(config: ProviderConfig) {
         context.dataStore.edit { prefs ->
-            val current = parseProvidersJson(prefs[providersKey] ?: "[]").toMutableList()
+            val current = if (prefs[providersKey] != null) {
+                parseProvidersJson(prefs[providersKey]!!).toMutableList()
+            } else {
+                defaultProviders.toMutableList()
+            }
             val index = current.indexOfFirst { it.id == config.id }
             if (index >= 0) {
                 current[index] = config

@@ -11,7 +11,12 @@ class MemoryRepository(
     val allTasks: Flow<List<TaskEntity>> = taskDao.getAll()
 
     suspend fun insertMemory(key: String, value: String, category: String = "general") {
-        memoryDao.insert(MemoryEntity(key = key, value = value, category = category))
+        val existing = memoryDao.getByKey(key)
+        if (existing != null) {
+            memoryDao.update(existing.copy(value = value, category = category))
+        } else {
+            memoryDao.insert(MemoryEntity(key = key, value = value, category = category))
+        }
     }
 
     suspend fun insertMessage(userMessage: String, assistantMessage: String, model: String) {

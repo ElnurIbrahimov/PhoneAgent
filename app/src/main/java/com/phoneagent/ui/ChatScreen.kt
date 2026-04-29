@@ -57,7 +57,7 @@ fun ChatScreen(
 
     uiState.pendingConfirmation?.let { pending ->
         AlertDialog(
-            onDismissRequest = {},
+            onDismissRequest = { agentController.cancelPendingAction() },
             title = { Text("Confirm sensitive action") },
             text = {
                 Column {

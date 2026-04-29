@@ -17,7 +17,7 @@ class ModelRouter(
         val providers = providerRepository.providers.first()
         val providerConfig = providers.find { it.availableModels.contains(model) && it.isEnabled }
             ?: providers.firstOrNull { it.isEnabled }
-            ?: CrofAiDefaults.DEFAULT_CONFIG
+            ?: throw IllegalStateException("No enabled provider available. Configure a provider in Settings.")
 
         return createProvider(injectApiKey(providerConfig))
     }

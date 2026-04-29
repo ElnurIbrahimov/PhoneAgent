@@ -2,17 +2,25 @@ package com.phoneagent.browser
 
 object BrowserUrlNormalizer {
 
-    fun normalize(input: String): String {
+    private val DANGEROUS_SCHEMES = setOf("javascript", "data", "file", "content", "intent")
+
+    fun normalize(input: String): String? {
         val trimmed = input.trim()
-        if (trimmed.isBlank()) {
+        if (trimmed.isBlank()) return null
+
+        if (trimmed.contains("://")) {
+            val scheme = trimmed.substringBefore("://").lowercase()
+            if (scheme in DANGEROUS_SCHEMES) return null
             return trimmed
         }
-        return if (URL_SCHEME_REGEX.containsMatchIn(trimmed)) {
-            trimmed
-        } else {
-            "https://$trimmed"
-        }
-    }
 
-    private val URL_SCHEME_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")
+        if (trimmed.contains(":")) {
+            val scheme = trimmed.substringBefore(":").lowercase()
+            if (scheme in DANGEROUS_SCHEMES) return null
+        }
+
+        if (trimmed.startsWith("about:")) return trimmed
+
+        return "https://$trimmed"
+    }
 }

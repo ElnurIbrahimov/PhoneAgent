@@ -12,21 +12,40 @@ jobs:
       contains(github.event.comment.body, '/opencode')
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
-      contents: write
+      contents: read
       pull-requests: write
       issues: write
     steps:
+      - name: Authorize actor
+        id: auth
+        run: |
+          ALLOWED_USERS="${{ vars.OPENCODE_ALLOWED_USERS }}"
+          if [ -z "$ALLOWED_USERS" ]; then
+            echo "OPENCODE_ALLOWED_USERS not configured. Set it in repository variables."
+            exit 1
+          fi
+          ACTOR="${{ github.actor }}"
+          for user in $ALLOWED_USERS; do
+            if [ "$ACTOR" = "$user" ]; then
+              echo "Authorized: $ACTOR"
+              exit 0
+            fi
+          done
+          echo "Unauthorized actor: $ACTOR"
+          exit 1
+
       - name: Checkout repository
-        uses: actions/checkout@v6
+        if: success()
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
           persist-credentials: false
 
       - name: Run OpenCode
-        uses: anomalyco/opencode/github@latest
+        if: success()
+        uses: anomalyco/opencode/github@v1
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         with:
           model: openai/gpt-4o
-          share: true
+          share: false

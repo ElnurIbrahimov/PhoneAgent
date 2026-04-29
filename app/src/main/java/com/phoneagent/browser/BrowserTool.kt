@@ -8,10 +8,12 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import kotlin.coroutines.resume
 
-class BrowserTool(private val context: Context) {
+class BrowserTool(context: Context) {
+    private val appContext: Context = context.applicationContext
 
     suspend fun execute(toolName: String, arguments: Map<String, String>): String {
-        val action = arguments["action"] ?: return errorResult(toolName, "Missing 'action' argument.")
+        val action = arguments["action"] ?: return errorResult(toolName, "Missing 'action' argument.",
+            "Available actions: open_url, read_page, read_metadata, click_text, click_selector, type_into_selector, type_into_focused, scroll, back, reload")
 
         return when (action) {
             "open_url" -> {
@@ -43,22 +45,26 @@ class BrowserTool(private val context: Context) {
             }
             "back" -> back(toolName)
             "reload" -> reload(toolName)
-            else -> errorResult(toolName, "Unknown browser action: $action")
+            else -> errorResult(toolName, "Unknown browser action: $action",
+                "Available actions: open_url, read_page, read_metadata, click_text, click_selector, type_into_selector, type_into_focused, scroll, back, reload")
         }
     }
 
     private suspend fun openUrl(toolName: String, url: String): String = withContext(Dispatchers.Main) {
         val normalizedUrl = BrowserUrlNormalizer.normalize(url)
+            ?: return@withContext errorResult(toolName, "Invalid or blocked URL.",
+                "Provide a valid http/https URL to navigate to.")
         if (!BrowserSessionManager.hasActiveBrowser()) {
             try {
-                val intent = Intent(context, AgentBrowserActivity::class.java).apply {
+                val intent = Intent(appContext, AgentBrowserActivity::class.java).apply {
                     putExtra("url", normalizedUrl)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 }
-                context.startActivity(intent)
+                appContext.startActivity(intent)
                 successResult(toolName, "Browser launched with URL: $normalizedUrl")
             } catch (e: Exception) {
-                errorResult(toolName, "Browser not active and could not launch activity: ${e.message}")
+                errorResult(toolName, "Browser not active and could not launch activity: ${e.message}",
+                    "Use browser.open_url to launch the browser first.")
             }
         } else {
             BrowserSessionManager.openUrl(normalizedUrl)
@@ -68,7 +74,8 @@ class BrowserTool(private val context: Context) {
 
     private suspend fun readPage(toolName: String): String = withContext(Dispatchers.Main) {
         val webView = BrowserSessionManager.getActiveWebView()
-            ?: return@withContext errorResult(toolName, "Browser not active.")
+            ?: return@withContext errorResult(toolName, "Browser not active.",
+                "Use browser.open_url to launch the browser first.")
         suspendCancellableCoroutine { continuation ->
             PageExtractor.extractText(webView) { text ->
                 continuation.resume(
@@ -80,7 +87,8 @@ class BrowserTool(private val context: Context) {
 
     private suspend fun readMetadata(toolName: String): String = withContext(Dispatchers.Main) {
         val webView = BrowserSessionManager.getActiveWebView()
-            ?: return@withContext errorResult(toolName, "Browser not active.")
+            ?: return@withContext errorResult(toolName, "Browser not active.",
+                "Use browser.open_url to launch the browser first.")
         suspendCancellableCoroutine { continuation ->
             PageExtractor.extractMetadata(webView) { meta ->
                 continuation.resume(
@@ -92,12 +100,14 @@ class BrowserTool(private val context: Context) {
 
     private suspend fun clickText(toolName: String, text: String): String = withContext(Dispatchers.Main) {
         val webView = BrowserSessionManager.getActiveWebView()
-            ?: return@withContext errorResult(toolName, "Browser not active.")
+            ?: return@withContext errorResult(toolName, "Browser not active.",
+                "Use browser.open_url to launch the browser first.")
         suspendCancellableCoroutine { continuation ->
             DomActionExecutor.clickText(webView, text) { success, error ->
                 continuation.resume(
                     if (success) successResult(toolName, "Clicked element with text: $text")
-                    else errorResult(toolName, error ?: "Click failed.")
+                    else errorResult(toolName, error ?: "Click failed.",
+                        "Use browser.read_page to read the page and find clickable elements.")
                 )
             }
         }
@@ -105,12 +115,14 @@ class BrowserTool(private val context: Context) {
 
     private suspend fun clickSelector(toolName: String, selector: String): String = withContext(Dispatchers.Main) {
         val webView = BrowserSessionManager.getActiveWebView()
-            ?: return@withContext errorResult(toolName, "Browser not active.")
+            ?: return@withContext errorResult(toolName, "Browser not active.",
+                "Use browser.open_url to launch the browser first.")
         suspendCancellableCoroutine { continuation ->
             DomActionExecutor.clickSelector(webView, selector) { success, error ->
                 continuation.resume(
                     if (success) successResult(toolName, "Clicked element with selector: $selector")
-                    else errorResult(toolName, error ?: "Click failed.")
+                    else errorResult(toolName, error ?: "Click failed.",
+                        "Use browser.read_page to verify the selector exists on the page.")
                 )
             }
         }
@@ -118,12 +130,14 @@ class BrowserTool(private val context: Context) {
 
     private suspend fun typeIntoSelector(toolName: String, selector: String, text: String): String = withContext(Dispatchers.Main) {
         val webView = BrowserSessionManager.getActiveWebView()
-            ?: return@withContext errorResult(toolName, "Browser not active.")
+            ?: return@withContext errorResult(toolName, "Browser not active.",
+                "Use browser.open_url to launch the browser first.")
         suspendCancellableCoroutine { continuation ->
             DomActionExecutor.typeIntoSelector(webView, selector, text) { success, error ->
                 continuation.resume(
                     if (success) successResult(toolName, "Typed into $selector.")
-                    else errorResult(toolName, error ?: "Type failed.")
+                    else errorResult(toolName, error ?: "Type failed.",
+                        "Use browser.read_page to verify the selector targets an input element.")
                 )
             }
         }
@@ -131,12 +145,14 @@ class BrowserTool(private val context: Context) {
 
     private suspend fun typeIntoFocused(toolName: String, text: String): String = withContext(Dispatchers.Main) {
         val webView = BrowserSessionManager.getActiveWebView()
-            ?: return@withContext errorResult(toolName, "Browser not active.")
+            ?: return@withContext errorResult(toolName, "Browser not active.",
+                "Use browser.open_url to launch the browser first.")
         suspendCancellableCoroutine { continuation ->
             DomActionExecutor.typeIntoFocused(webView, text) { success, error ->
                 continuation.resume(
                     if (success) successResult(toolName, "Typed into focused element.")
-                    else errorResult(toolName, error ?: "Type into focused element failed.")
+                    else errorResult(toolName, error ?: "Type into focused element failed.",
+                        "Use browser.click_selector to focus an input element first, then try typing.")
                 )
             }
         }
@@ -144,12 +160,14 @@ class BrowserTool(private val context: Context) {
 
     private suspend fun scroll(toolName: String, direction: String): String = withContext(Dispatchers.Main) {
         val webView = BrowserSessionManager.getActiveWebView()
-            ?: return@withContext errorResult(toolName, "Browser not active.")
+            ?: return@withContext errorResult(toolName, "Browser not active.",
+                "Use browser.open_url to launch the browser first.")
         suspendCancellableCoroutine { continuation ->
             DomActionExecutor.scroll(webView, direction) { success, error ->
                 continuation.resume(
                     if (success) successResult(toolName, "Scrolled $direction.")
-                    else errorResult(toolName, error ?: "Scroll failed.")
+                    else errorResult(toolName, error ?: "Scroll failed.",
+                        "Use browser.read_page to verify the page has scrollable content.")
                 )
             }
         }
@@ -160,13 +178,15 @@ class BrowserTool(private val context: Context) {
             BrowserSessionManager.goBack()
             successResult(toolName, "Navigated back.")
         } else {
-            errorResult(toolName, "Cannot go back.")
+            errorResult(toolName, "Cannot go back.",
+                "No previous page in browser history. Use browser.open_url to navigate to a new page.")
         }
     }
 
     private suspend fun reload(toolName: String): String = withContext(Dispatchers.Main) {
         if (!BrowserSessionManager.hasActiveBrowser()) {
-            return@withContext errorResult(toolName, "Browser not active.")
+            return@withContext errorResult(toolName, "Browser not active.",
+                "Use browser.open_url to launch the browser first.")
         }
         BrowserSessionManager.reload()
         successResult(toolName, "Page reloaded.")
@@ -182,13 +202,14 @@ class BrowserTool(private val context: Context) {
         }.toString()
     }
 
-    private fun errorResult(toolName: String, error: String): String {
+    private fun errorResult(toolName: String, error: String, suggestion: String? = null): String {
         return JSONObject().apply {
             put("type", "tool_result")
             put("tool", toolName)
             put("success", false)
             put("content", JSONObject.NULL)
             put("error", error)
+            put("suggestion", suggestion ?: JSONObject.NULL)
         }.toString()
     }
 }

@@ -23,7 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 class ChatOverlayController(
@@ -76,6 +76,13 @@ class ChatOverlayController(
         bindViews(view)
         observeState()
 
+        viewModel.onVoiceResult = { text ->
+            messageInput?.setText(text)
+        }
+        viewModel.onVoiceError = { error ->
+            Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+        }
+
         scope.launch {
             val models = viewModel.getAllAvailableModels()
             val adapter = ArrayAdapter(context, android.R.layout.simple_spinner_item, models)
@@ -112,11 +119,16 @@ class ChatOverlayController(
         minimizeButton?.setOnClickListener {
             hide()
         }
+
+        val micButton = view.findViewById<Button>(R.id.mic_button)
+        micButton?.setOnClickListener {
+            viewModel.startVoiceInput()
+        }
     }
 
     private fun observeState() {
         scope.launch {
-            viewModel.uiState.collectLatest { state ->
+            viewModel.uiState.collect { state ->
                 updateUI(state)
 
                 if (state.pendingConfirmation != null && !hasLaunchedMainActivity) {
