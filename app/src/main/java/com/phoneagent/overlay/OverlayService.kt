@@ -29,6 +29,7 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         bubbleController = FloatingBubbleController(this) {
             toggleChat()
         }
@@ -88,6 +89,7 @@ class OverlayService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         chatController?.destroy()
         bubbleController?.hide()
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -96,6 +98,8 @@ class OverlayService : Service() {
 
     companion object {
         private const val NOTIFICATION_ID = 1
+        @Volatile var isRunning = false
+            private set
 
         fun start(context: Context) {
             val intent = Intent(context, OverlayService::class.java)

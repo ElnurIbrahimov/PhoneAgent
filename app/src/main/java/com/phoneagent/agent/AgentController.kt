@@ -150,7 +150,7 @@ class AgentController(context: Context) {
 
         _uiState.update {
             it.copy(
-                messages = it.messages + ChatMessage("user", message),
+                messages = it.messages + ChatMessage(id = ChatMessage.nextId(), role = "user", content = message),
                 isLoading = true,
                 error = null,
                 agentStepStatus = "Thinking",

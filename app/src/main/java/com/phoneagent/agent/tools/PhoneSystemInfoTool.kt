@@ -53,21 +53,9 @@ class PhoneSystemInfoTool(private val context: Context) : Tool, DescribableTool 
                 put("networkType", networkType)
             }
 
-            JSONObject().apply {
-                put("type", "tool_result")
-                put("tool", name)
-                put("success", true)
-                put("content", info.toString())
-                put("error", JSONObject.NULL)
-            }.toString()
+            ToolResult.success(name, info.toString())
         } catch (e: Exception) {
-            JSONObject().apply {
-                put("type", "tool_result")
-                put("tool", name)
-                put("success", false)
-                put("content", JSONObject.NULL)
-                put("error", e.message ?: "Unknown error")
-            }.toString()
+            ToolResult.error(name, e.message ?: "Unknown error")
         }
     }
 }

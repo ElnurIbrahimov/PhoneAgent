@@ -203,7 +203,7 @@ fun OverlayChatContent(
                     )
                 }
 
-                val sendGradient = Brush.linearGradient(listOf(Primary, Secondary))
+                val sendGradient = AccentGradient
                 IconButton(
                     onClick = {
                         if (messageText.isNotBlank()) {

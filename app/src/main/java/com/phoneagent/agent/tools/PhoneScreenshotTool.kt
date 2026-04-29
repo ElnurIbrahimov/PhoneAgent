@@ -28,22 +28,9 @@ class PhoneScreenshotTool(
                 put("image_size_bytes", imageBytes.size)
             }
 
-            JSONObject().apply {
-                put("type", "tool_result")
-                put("tool", name)
-                put("success", true)
-                put("content", content.toString())
-                put("error", JSONObject.NULL)
-            }.toString()
+            ToolResult.success(name, content.toString())
         } catch (e: Exception) {
-            JSONObject().apply {
-                put("type", "tool_result")
-                put("tool", name)
-                put("success", false)
-                put("content", JSONObject.NULL)
-                put("error", e.message ?: "Screenshot failed")
-                put("suggestion", "Screen capture may need permission. Use accessibility.read_tree for UI info without screenshot.")
-            }.toString()
+            ToolResult.error(name, e.message ?: "Screenshot failed", "Screen capture may need permission. Use accessibility.read_tree for UI info without screenshot.")
         }
     }
 }

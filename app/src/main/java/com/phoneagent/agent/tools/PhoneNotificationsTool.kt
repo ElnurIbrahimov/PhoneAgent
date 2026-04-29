@@ -25,21 +25,9 @@ class PhoneNotificationsTool : Tool, DescribableTool {
                     put("packageName", entry.packageName)
                 })
             }
-            JSONObject().apply {
-                put("type", "tool_result")
-                put("tool", name)
-                put("success", true)
-                put("content", array.toString())
-                put("error", JSONObject.NULL)
-            }.toString()
+            ToolResult.success(name, array.toString())
         } catch (e: Exception) {
-            JSONObject().apply {
-                put("type", "tool_result")
-                put("tool", name)
-                put("success", false)
-                put("content", JSONObject.NULL)
-                put("error", e.message ?: "Notification read failed")
-            }.toString()
+            ToolResult.error(name, e.message ?: "Notification read failed")
         }
     }
 }

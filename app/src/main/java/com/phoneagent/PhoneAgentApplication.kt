@@ -15,7 +15,6 @@ class PhoneAgentApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        agentController = AgentController(this)
     }
 
     private fun createNotificationChannel() {
@@ -36,7 +35,11 @@ class PhoneAgentApplication : Application() {
         const val CHANNEL_ID = "phoneagent_overlay_channel"
 
         fun agentController(context: Context): AgentController {
-            return (context.applicationContext as PhoneAgentApplication).agentController
+            val app = context.applicationContext as PhoneAgentApplication
+            if (!app::agentController.isInitialized) {
+                app.agentController = AgentController(app)
+            }
+            return app.agentController
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.phoneagent.ui.theme
 
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 val Background = Color(0xFF0D0D0F)
@@ -26,3 +27,6 @@ val UserBubbleStart = Color(0x408B5CF6)
 val UserBubbleEnd = Color(0x406366F1)
 val AgentBubble = Color(0xFF1E1E24)
 val AgentBubbleBorder = Color(0xFF2A2A32)
+
+val AccentGradient = Brush.linearGradient(listOf(Primary, Secondary))
+val AccentGradientMuted = Brush.linearGradient(listOf(Primary.copy(alpha = 0.15f), Secondary.copy(alpha = 0.15f)))

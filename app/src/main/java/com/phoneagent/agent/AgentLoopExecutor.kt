@@ -182,7 +182,7 @@ class AgentLoopExecutor(
         val answer = finalContent ?: "I reached the step limit without a final answer. Please summarize what you've accomplished so far."
         applyState {
             it.copy(
-                messages = it.messages + ChatMessage("assistant", answer),
+                messages = it.messages + ChatMessage(id = ChatMessage.nextId(), role = "assistant", content = answer),
                 isLoading = false,
                 agentStepStatus = "Done",
                 error = null,

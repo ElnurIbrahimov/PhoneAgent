@@ -5,8 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import com.phoneagent.agent.DescribableTool
 import com.phoneagent.agent.Tool
-import org.json.JSONObject
-
 class PhoneOpenAppTool(private val context: Context) : Tool, DescribableTool {
 
     override val name: String = "phone.open_app"
@@ -33,27 +31,13 @@ class PhoneOpenAppTool(private val context: Context) : Tool, DescribableTool {
 
             when {
                 matches.isEmpty() -> {
-                    JSONObject().apply {
-                        put("type", "tool_result")
-                        put("tool", name)
-                        put("success", false)
-                        put("content", JSONObject.NULL)
-                        put("error", "No matching app found.")
-                        put("suggestion", "Use phone.list_apps to see installed apps.")
-                    }.toString()
+                    ToolResult.error(name, "No matching app found.", "Use phone.list_apps to see installed apps.")
                 }
                 matches.size > 1 -> {
                     val ambiguity = matches.take(5).joinToString(", ") {
                         "${it.loadLabel(pm)} (${it.activityInfo.packageName})"
                     }
-                    JSONObject().apply {
-                        put("type", "tool_result")
-                        put("tool", name)
-                        put("success", false)
-                        put("content", JSONObject.NULL)
-                        put("error", "Multiple matches found: $ambiguity. Please specify package_name.")
-                        put("suggestion", "Specify a more precise package_name from the list.")
-                    }.toString()
+                    ToolResult.error(name, "Multiple matches found: $ambiguity. Please specify package_name.", "Specify a more precise package_name from the list.")
                 }
                 else -> {
                     val target = matches.first()
@@ -61,34 +45,14 @@ class PhoneOpenAppTool(private val context: Context) : Tool, DescribableTool {
                     if (launchIntent != null) {
                         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         context.startActivity(launchIntent)
-                        JSONObject().apply {
-                            put("type", "tool_result")
-                            put("tool", name)
-                            put("success", true)
-                            put("content", "Opened ${target.loadLabel(pm)}.")
-                            put("error", JSONObject.NULL)
-                        }.toString()
+                        ToolResult.success(name, "Opened ${target.loadLabel(pm)}.")
                     } else {
-                        JSONObject().apply {
-                            put("type", "tool_result")
-                            put("tool", name)
-                            put("success", false)
-                            put("content", JSONObject.NULL)
-                            put("error", "Could not create launch intent for ${target.activityInfo.packageName}.")
-                            put("suggestion", "Use phone.list_apps to verify the app is installed.")
-                        }.toString()
+                        ToolResult.error(name, "Could not create launch intent for ${target.activityInfo.packageName}.", "Use phone.list_apps to verify the app is installed.")
                     }
                 }
             }
         } catch (e: Exception) {
-            JSONObject().apply {
-                put("type", "tool_result")
-                put("tool", name)
-                put("success", false)
-                put("content", JSONObject.NULL)
-                put("error", e.message ?: "Unknown error")
-                put("suggestion", "Use phone.list_apps to see installed apps.")
-            }.toString()
+            ToolResult.error(name, e.message ?: "Unknown error", "Use phone.list_apps to see installed apps.")
         }
     }
 }

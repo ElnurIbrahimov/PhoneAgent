@@ -7,10 +7,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import androidx.compose.ui.platform.ComposeView
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 
 class ChatOverlayController(
     private val context: Context,
@@ -22,7 +18,6 @@ class ChatOverlayController(
 
     private var chatView: View? = null
     private var params: WindowManager.LayoutParams? = null
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     fun show() {
         if (chatView != null) return
@@ -74,6 +69,5 @@ class ChatOverlayController(
 
     fun destroy() {
         hide()
-        scope.cancel()
     }
 }

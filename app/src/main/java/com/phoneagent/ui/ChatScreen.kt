@@ -115,7 +115,7 @@ fun ChatScreen(
                         ) {
                             items(
                                 items = uiState.messages,
-                                key = { it.hashCode() }
+                                key = { it.id }
                             ) { message ->
                                 MessageBubble(message = message)
                             }
@@ -301,7 +301,7 @@ private fun ChatInputBar(
                 .size(48.dp)
                 .clip(CircleShape)
                 .background(
-                    brush = Brush.linearGradient(listOf(Primary, Secondary))
+                    brush = AccentGradient
                 )
                 .clickable(enabled = enabled && value.isNotBlank()) { onSend() },
             contentAlignment = Alignment.Center

@@ -22,7 +22,7 @@ class MemoryRepository(
     suspend fun insertMessage(userMessage: String, assistantMessage: String, model: String) {
         memoryDao.insert(
             MemoryEntity(
-                key = "chat_${System.currentTimeMillis()}",
+                key = "chat_${System.nanoTime()}_${(Math.random() * 10000).toInt()}",
                 value = "User: $userMessage\nAssistant: $assistantMessage",
                 category = "chat_$model"
             )

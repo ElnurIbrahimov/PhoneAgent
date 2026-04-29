@@ -1,9 +1,15 @@
 package com.phoneagent.agent
 
 data class ChatMessage(
+    val id: Int = 0,
     val role: String,
     val content: String
-)
+) {
+    companion object {
+        private var counter = 0
+        fun nextId(): Int = counter++
+    }
+}
 
 data class AgentUiState(
     val messages: List<ChatMessage> = emptyList(),

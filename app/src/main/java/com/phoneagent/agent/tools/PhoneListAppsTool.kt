@@ -31,21 +31,9 @@ class PhoneListAppsTool(private val context: Context) : Tool, DescribableTool {
                     put("packageName", packageName)
                 })
             }
-            JSONObject().apply {
-                put("type", "tool_result")
-                put("tool", name)
-                put("success", true)
-                put("content", array.toString())
-                put("error", JSONObject.NULL)
-            }.toString()
+            ToolResult.success(name, array.toString())
         } catch (e: Exception) {
-            JSONObject().apply {
-                put("type", "tool_result")
-                put("tool", name)
-                put("success", false)
-                put("content", JSONObject.NULL)
-                put("error", e.message ?: "Unknown error")
-            }.toString()
+            ToolResult.error(name, e.message ?: "Unknown error")
         }
     }
 }

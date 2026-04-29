@@ -5,7 +5,7 @@ import android.content.Intent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
+import com.phoneagent.agent.tools.ToolResult
 import kotlin.coroutines.resume
 
 class BrowserTool(context: Context) {
@@ -192,24 +192,7 @@ class BrowserTool(context: Context) {
         successResult(toolName, "Page reloaded.")
     }
 
-    private fun successResult(toolName: String, content: String): String {
-        return JSONObject().apply {
-            put("type", "tool_result")
-            put("tool", toolName)
-            put("success", true)
-            put("content", content)
-            put("error", JSONObject.NULL)
-        }.toString()
-    }
+    private fun successResult(toolName: String, content: String): String = ToolResult.success(toolName, content)
 
-    private fun errorResult(toolName: String, error: String, suggestion: String? = null): String {
-        return JSONObject().apply {
-            put("type", "tool_result")
-            put("tool", toolName)
-            put("success", false)
-            put("content", JSONObject.NULL)
-            put("error", error)
-            put("suggestion", suggestion ?: JSONObject.NULL)
-        }.toString()
-    }
+    private fun errorResult(toolName: String, error: String, suggestion: String? = null): String = ToolResult.error(toolName, error, suggestion)
 }

@@ -100,7 +100,7 @@ class ProviderRepository(private val context: Context) {
                 put("name", config.name)
                 put("type", config.type.name)
                 put("baseUrl", config.baseUrl)
-                put("apiKey", config.apiKey)
+                put("apiKey", JSONObject.NULL)
                 put("defaultModel", config.defaultModel)
                 put("availableModels", JSONArray(config.availableModels))
                 put("isEnabled", config.isEnabled)

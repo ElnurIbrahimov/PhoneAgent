@@ -15,6 +15,8 @@ import android.os.Handler
 import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.WindowManager
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayOutputStream
@@ -34,14 +36,13 @@ interface ScreenCaptureManager {
 class ScreenCaptureManagerImpl(private val context: Context) : ScreenCaptureManager {
 
     private var mediaProjection: MediaProjection? = null
-    private var virtualDisplay: VirtualDisplay? = null
-    private var imageReader: ImageReader? = null
     @Volatile private var latestBitmap: Bitmap? = null
     private var initialized = false
     private var displayWidth = 0
     private var displayHeight = 0
     private var displayDensity = 0
     private val handler = Handler(Looper.getMainLooper())
+    private val captureMutex = Mutex()
 
     override fun isAvailable(): Boolean = initialized && mediaProjection != null
 
@@ -49,7 +50,7 @@ class ScreenCaptureManagerImpl(private val context: Context) : ScreenCaptureMana
         if (requestCode != REQUEST_CODE || resultCode != Activity.RESULT_OK || data == null) return
 
         val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        releaseResources()
+        mediaProjection?.stop()
         mediaProjection = projectionManager.getMediaProjection(resultCode, data)
 
         val metrics = DisplayMetrics()
@@ -68,7 +69,6 @@ class ScreenCaptureManagerImpl(private val context: Context) : ScreenCaptureMana
     }
 
     override fun stopCapture() {
-        releaseResources()
         mediaProjection?.stop()
         mediaProjection = null
         initialized = false
@@ -81,55 +81,56 @@ class ScreenCaptureManagerImpl(private val context: Context) : ScreenCaptureMana
             throw IllegalStateException("Screen capture not initialized. Grant permission first.")
         }
 
-        releaseVirtualDisplayAndReader()
+        val mediaProj = mediaProjection ?: throw IllegalStateException("MediaProjection not available")
 
-        imageReader = ImageReader.newInstance(displayWidth, displayHeight, PixelFormat.RGBA_8888, 2)
-        virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "PhoneAgentScreenCapture",
-            displayWidth, displayHeight, displayDensity,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader!!.surface, null, handler
-        )
+        captureMutex.withLock {
+            val reader = ImageReader.newInstance(displayWidth, displayHeight, PixelFormat.RGBA_8888, 2)
+            val display = mediaProj.createVirtualDisplay(
+                "PhoneAgentScreenCapture",
+                displayWidth, displayHeight, displayDensity,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                reader.surface, null, handler
+            )
 
-        try {
-            suspendCancellableCoroutine { continuation ->
-                var imageAcquired = false
-                imageReader?.setOnImageAvailableListener({ reader ->
-                    if (imageAcquired) return@setOnImageAvailableListener
-                    val image = reader.acquireLatestImage()
-                    if (image != null) {
-                        imageAcquired = true
-                        try {
-                            val planes = image.planes
-                            val buffer = planes[0].buffer
-                            val pixelStride = planes[0].pixelStride
-                            val rowStride = planes[0].rowStride
-                            val rowPadding = rowStride - pixelStride * displayWidth
-                            val bitmapPadding = if (pixelStride > 0) rowPadding / pixelStride else 0
-                            val bitmap = Bitmap.createBitmap(displayWidth + bitmapPadding, displayHeight, Bitmap.Config.ARGB_8888)
-                            bitmap.copyPixelsFromBuffer(buffer)
-                            val cropped = Bitmap.createBitmap(bitmap, 0, 0, displayWidth, displayHeight)
-                            synchronized(this) {
-                                latestBitmap = cropped
+            try {
+                suspendCancellableCoroutine { continuation ->
+                    var imageAcquired = false
+                    reader.setOnImageAvailableListener({ r ->
+                        if (imageAcquired) return@setOnImageAvailableListener
+                        val image = r.acquireLatestImage()
+                        if (image != null) {
+                            imageAcquired = true
+                            try {
+                                val planes = image.planes
+                                val buffer = planes[0].buffer
+                                val pixelStride = planes[0].pixelStride
+                                val rowStride = planes[0].rowStride
+                                val rowPadding = rowStride - pixelStride * displayWidth
+                                val bitmapPadding = if (pixelStride > 0) rowPadding / pixelStride else 0
+                                val bitmap = Bitmap.createBitmap(displayWidth + bitmapPadding, displayHeight, Bitmap.Config.ARGB_8888)
+                                bitmap.copyPixelsFromBuffer(buffer)
+                                val cropped = Bitmap.createBitmap(bitmap, 0, 0, displayWidth, displayHeight)
+                                synchronized(this) { latestBitmap = cropped }
+                                bitmap.recycle()
+
+                                val baos = ByteArrayOutputStream()
+                                cropped.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+                                val bytes = baos.toByteArray()
+                                baos.close()
+
+                                continuation.resume(bytes)
+                            } catch (e: Exception) {
+                                continuation.resumeWithException(e)
+                            } finally {
+                                image.close()
                             }
-                            bitmap.recycle()
-
-                            val baos = ByteArrayOutputStream()
-                            cropped.compress(Bitmap.CompressFormat.JPEG, 80, baos)
-                            val bytes = baos.toByteArray()
-                            baos.close()
-
-                            continuation.resume(bytes)
-                        } catch (e: Exception) {
-                            continuation.resumeWithException(e)
-                        } finally {
-                            image.close()
                         }
-                    }
-                }, handler)
+                    }, handler)
+                }
+            } finally {
+                display.release()
+                reader.close()
             }
-        } finally {
-            releaseVirtualDisplayAndReader()
         }
     }
 
@@ -149,17 +150,6 @@ class ScreenCaptureManagerImpl(private val context: Context) : ScreenCaptureMana
         val bytes = baos.toByteArray()
         baos.close()
         return bytes
-    }
-
-    private fun releaseVirtualDisplayAndReader() {
-        virtualDisplay?.release()
-        virtualDisplay = null
-        imageReader?.close()
-        imageReader = null
-    }
-
-    private fun releaseResources() {
-        releaseVirtualDisplayAndReader()
     }
 
     companion object {

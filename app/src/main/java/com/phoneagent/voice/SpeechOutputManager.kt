@@ -15,7 +15,7 @@ class SpeechOutputManagerImpl(context: Context) : SpeechOutputManager {
     private val appContext: Context = context.applicationContext
     private var tts: TextToSpeech? = null
     private var initialized = false
-    private val pendingQueue = mutableListOf<String>()
+    private val pendingQueue = java.util.Collections.synchronizedList(mutableListOf<String>())
 
     override fun isAvailable(): Boolean = initialized
 
@@ -29,8 +29,10 @@ class SpeechOutputManagerImpl(context: Context) : SpeechOutputManager {
                     initialized = (status == TextToSpeech.SUCCESS)
                     if (initialized) {
                         tts?.language = Locale.getDefault()
-                        pendingQueue.forEach { tts?.speak(it, TextToSpeech.QUEUE_ADD, null, null) }
-                        pendingQueue.clear()
+                        synchronized(pendingQueue) {
+                            pendingQueue.forEach { tts?.speak(it, TextToSpeech.QUEUE_ADD, null, null) }
+                            pendingQueue.clear()
+                        }
                     }
                 }
             }

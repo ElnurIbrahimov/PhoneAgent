@@ -33,7 +33,7 @@ fun MainScreen(
     onNavigateToChat: () -> Unit
 ) {
     val context = LocalContext.current
-    var overlayRunning by remember { mutableStateOf(false) }
+    var overlayRunning by remember { mutableStateOf(OverlayService.isRunning) }
 
     Scaffold(
         topBar = {
