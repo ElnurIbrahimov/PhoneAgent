@@ -5,31 +5,23 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import android.net.Uri
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.PermissionChecker
+import com.phoneagent.ui.components.StatusChip
+import com.phoneagent.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,10 +34,13 @@ fun PermissionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Permissions") },
+                title = { Text("Permissions", color = OnBackground) },
                 navigationIcon = {
-                    Button(onClick = onBack) { Text("Back") }
-                }
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = OnBackground)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Background)
             )
         }
     ) { padding ->
@@ -56,85 +51,150 @@ fun PermissionScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Required Permissions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = "Required Permissions",
+                style = MaterialTheme.typography.titleMedium,
+                color = OnBackground,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "PhoneAgent needs these permissions to operate effectively.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = OnSurfaceMuted
+            )
+            Spacer(modifier = Modifier.height(8.dp))
 
-            PermissionRow(
-                label = "Overlay (Draw over apps)",
-                granted = android.provider.Settings.canDrawOverlays(context),
-                onRequest = {
-                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
-                        data = Uri.parse("package:${context.packageName}")
+            val permissions = listOf(
+                PermissionItem(
+                    icon = Icons.Default.Layers,
+                    label = "Overlay",
+                    description = "Draw over other apps",
+                    granted = android.provider.Settings.canDrawOverlays(context),
+                    onRequest = {
+                        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                        context.startActivity(intent)
                     }
-                    context.startActivity(intent)
-                }
+                ),
+                PermissionItem(
+                    icon = Icons.Default.Accessibility,
+                    label = "Accessibility",
+                    description = "Read screen & perform gestures",
+                    granted = isAccessibilityServiceEnabled(context),
+                    onRequest = {
+                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    }
+                ),
+                PermissionItem(
+                    icon = Icons.Default.Mic,
+                    label = "Microphone",
+                    description = "Voice input",
+                    granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PermissionChecker.PERMISSION_GRANTED,
+                    onRequest = { onRequestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO)) }
+                ),
+                PermissionItem(
+                    icon = Icons.Default.Sms,
+                    label = "SMS",
+                    description = "Send messages",
+                    granted = ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PermissionChecker.PERMISSION_GRANTED,
+                    onRequest = { onRequestPermissions(arrayOf(Manifest.permission.SEND_SMS)) }
+                ),
+                PermissionItem(
+                    icon = Icons.Default.Phone,
+                    label = "Phone",
+                    description = "Make calls",
+                    granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PermissionChecker.PERMISSION_GRANTED,
+                    onRequest = { onRequestPermissions(arrayOf(Manifest.permission.CALL_PHONE)) }
+                ),
+                PermissionItem(
+                    icon = Icons.Default.Notifications,
+                    label = "Notifications",
+                    description = "Read notification listener",
+                    granted = isNotificationListenerEnabled(context),
+                    onRequest = {
+                        context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    }
+                )
             )
 
-            PermissionRow(
-                label = "Accessibility Service",
-                granted = isAccessibilityServiceEnabled(context),
-                onRequest = {
-                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                }
-            )
-
-            PermissionRow(
-                label = "Microphone (Voice input)",
-                granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PermissionChecker.PERMISSION_GRANTED,
-                onRequest = { onRequestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO)) }
-            )
-
-            PermissionRow(
-                label = "SMS (Send messages)",
-                granted = ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) == PermissionChecker.PERMISSION_GRANTED,
-                onRequest = { onRequestPermissions(arrayOf(Manifest.permission.SEND_SMS)) }
-            )
-
-            PermissionRow(
-                label = "Phone (Make calls)",
-                granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == PermissionChecker.PERMISSION_GRANTED,
-                onRequest = { onRequestPermissions(arrayOf(Manifest.permission.CALL_PHONE)) }
-            )
-
-            PermissionRow(
-                label = "Notifications (Listener)",
-                granted = isNotificationListenerEnabled(context),
-                onRequest = {
-                    context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                }
-            )
+            permissions.forEach { item ->
+                PermissionCard(item = item)
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "After enabling a permission, you may need to restart the app.",
+                text = "After enabling a permission, you may need to restart the app.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = OnSurfaceDim
             )
         }
     }
 }
 
+data class PermissionItem(
+    val icon: ImageVector,
+    val label: String,
+    val description: String,
+    val granted: Boolean,
+    val onRequest: () -> Unit
+)
+
 @Composable
-private fun PermissionRow(label: String, granted: Boolean, onRequest: () -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "$label: ${if (granted) "GRANTED" else "NOT GRANTED"}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-            fontWeight = if (granted) FontWeight.Normal else FontWeight.Bold
-        )
-        if (!granted) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Button(
-                onClick = onRequest,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondary
-                )
+private fun PermissionCard(item: PermissionItem) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        shape = CardShape
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (item.granted) Success.copy(alpha = 0.15f) else SurfaceElevated),
+                contentAlignment = Alignment.Center
             ) {
-                Text("Enable")
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    tint = if (item.granted) Success else OnSurfaceDim,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = OnBackground,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = item.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurfaceMuted
+                )
+            }
+
+            if (item.granted) {
+                StatusChip(text = "Granted", isActive = true)
+            } else {
+                Button(
+                    onClick = item.onRequest,
+                    shape = ButtonShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                ) {
+                    Text("Enable", color = OnBackground)
+                }
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 

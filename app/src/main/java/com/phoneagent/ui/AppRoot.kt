@@ -12,6 +12,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.phoneagent.agent.AgentController
+import com.phoneagent.ui.theme.*
 
 @Composable
 fun AppRoot(agentController: AgentController) {
@@ -26,7 +27,11 @@ fun AppRoot(agentController: AgentController) {
     val startDestination = if (onboardingDone) "main" else "onboarding"
 
     NavHost(navController = navController, startDestination = startDestination) {
-        composable("onboarding") {
+        composable(
+            "onboarding",
+            exitTransition = { PhoneAgentExitTransition },
+            popEnterTransition = { PhoneAgentPopEnterTransition }
+        ) {
             OnboardingScreen(
                 onComplete = {
                     onboardingDone = true
@@ -39,7 +44,13 @@ fun AppRoot(agentController: AgentController) {
                 }
             )
         }
-        composable("main") {
+        composable(
+            "main",
+            enterTransition = { PhoneAgentEnterTransition },
+            exitTransition = { PhoneAgentExitTransition },
+            popEnterTransition = { PhoneAgentPopEnterTransition },
+            popExitTransition = { PhoneAgentPopExitTransition }
+        ) {
             MainScreen(
                 agentController = agentController,
                 onNavigateToSettings = { navController.navigate("settings") },
@@ -47,13 +58,25 @@ fun AppRoot(agentController: AgentController) {
                 onNavigateToChat = { navController.navigate("chat") }
             )
         }
-        composable("settings") {
+        composable(
+            "settings",
+            enterTransition = { PhoneAgentEnterTransition },
+            exitTransition = { PhoneAgentExitTransition },
+            popEnterTransition = { PhoneAgentPopEnterTransition },
+            popExitTransition = { PhoneAgentPopExitTransition }
+        ) {
             ProviderSettingsScreen(
                 agentController = agentController,
                 onBack = { navController.popBackStack() }
             )
         }
-        composable("permissions") {
+        composable(
+            "permissions",
+            enterTransition = { PhoneAgentEnterTransition },
+            exitTransition = { PhoneAgentExitTransition },
+            popEnterTransition = { PhoneAgentPopEnterTransition },
+            popExitTransition = { PhoneAgentPopExitTransition }
+        ) {
             PermissionScreen(
                 onBack = { navController.popBackStack() },
                 onRequestPermissions = { permissions ->
@@ -61,7 +84,13 @@ fun AppRoot(agentController: AgentController) {
                 }
             )
         }
-        composable("chat") {
+        composable(
+            "chat",
+            enterTransition = { PhoneAgentEnterTransition },
+            exitTransition = { PhoneAgentExitTransition },
+            popEnterTransition = { PhoneAgentPopEnterTransition },
+            popExitTransition = { PhoneAgentPopExitTransition }
+        ) {
             ChatScreen(
                 agentController = agentController,
                 onBack = { navController.popBackStack() }

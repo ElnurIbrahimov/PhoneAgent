@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import com.phoneagent.agent.AgentController
 import com.phoneagent.perception.ScreenCaptureManagerImpl
 import com.phoneagent.ui.AppRoot
+import com.phoneagent.ui.theme.PhoneAgentTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -28,7 +29,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MaterialTheme {
+            PhoneAgentTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

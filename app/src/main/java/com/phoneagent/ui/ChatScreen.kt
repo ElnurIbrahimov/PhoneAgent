@@ -1,42 +1,38 @@
 package com.phoneagent.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.KeyboardVoice
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.phoneagent.agent.AgentAction
 import com.phoneagent.agent.AgentController
 import com.phoneagent.agent.AgentStep
 import com.phoneagent.agent.ToolResultParser
+import com.phoneagent.ui.components.ConfirmationDialog
+import com.phoneagent.ui.components.MessageBubble
+import com.phoneagent.ui.components.StatusChip
+import com.phoneagent.ui.components.TypingIndicator
+import com.phoneagent.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,159 +45,317 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     var showSteps by remember { mutableStateOf(false) }
 
-    LaunchedEffect(uiState.messages.size) {
+    LaunchedEffect(uiState.messages.size, uiState.isLoading) {
         if (uiState.messages.isNotEmpty()) {
             listState.animateScrollToItem(uiState.messages.size - 1)
         }
     }
 
-    uiState.pendingConfirmation?.let { pending ->
-        AlertDialog(
-            onDismissRequest = { agentController.cancelPendingAction() },
-            title = { Text("Confirm sensitive action") },
-            text = {
-                Column {
-                    Text("The agent wants to run a potentially sensitive action.")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Tool: ${pending.toolName}", style = MaterialTheme.typography.bodyMedium)
-                    Text("Args: ${pending.args}", style = MaterialTheme.typography.bodySmall)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Reason: ${pending.reason}", style = MaterialTheme.typography.bodySmall)
-                }
-            },
-            confirmButton = {
-                Button(onClick = { agentController.approvePendingAction() }) {
-                    Text("Approve and run")
-                }
-            },
-            dismissButton = {
-                Button(onClick = { agentController.cancelPendingAction() }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Chat") },
+                title = {
+                    Column {
+                        Text(
+                            text = "Chat",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        if (uiState.currentModel.isNotBlank()) {
+                            Text(
+                                text = uiState.currentModel,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = OnSurfaceMuted
+                            )
+                        }
+                    }
+                },
                 navigationIcon = {
-                    Button(onClick = onBack) {
-                        Text("Back")
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = OnBackground
+                        )
                     }
                 },
                 actions = {
-                    Button(onClick = { agentController.clearChat() }) {
-                        Text("Clear")
+                    IconButton(onClick = { agentController.clearChat() }) {
+                        Icon(
+                            imageVector = Icons.Filled.Clear,
+                            contentDescription = "Clear chat",
+                            tint = OnBackground
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Background,
+                    titleContentColor = OnBackground
+                )
             )
-        }
+        },
+        containerColor = Background
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
         ) {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
-                items(uiState.messages) { msg ->
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = msg.role.replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = msg.content,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-            }
-
-            if (uiState.isLoading) {
-                Column(
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator()
-                    uiState.agentStepStatus?.let { status ->
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = status,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
-            uiState.error?.let { error ->
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-
-            if (uiState.currentSteps.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showSteps = !showSteps },
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = if (showSteps) "Hide steps" else "Show steps (${uiState.currentSteps.size})",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        if (showSteps) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            uiState.currentSteps.forEach { step ->
-                                StepRow(step = step)
-                                Spacer(modifier = Modifier.height(6.dp))
+                Box(modifier = Modifier.weight(1f)) {
+                    if (uiState.messages.isEmpty() && !uiState.isLoading) {
+                        EmptyChatState()
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            state = listState,
+                            contentPadding = PaddingValues(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            items(
+                                items = uiState.messages,
+                                key = { it.hashCode() }
+                            ) { message ->
+                                MessageBubble(message = message)
+                            }
+                            if (uiState.isLoading) {
+                                item {
+                                    TypingIndicator()
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                if (uiState.currentSteps.isNotEmpty()) {
+                    StepViewer(
+                        steps = uiState.currentSteps,
+                        showSteps = showSteps,
+                        onToggle = { showSteps = !showSteps }
+                    )
+                }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
+                AnimatedVisibility(
+                    visible = uiState.error != null,
+                    enter = fadeIn() + slideInVertically { it }
+                ) {
+                    uiState.error?.let { error ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Error.copy(alpha = 0.15f))
+                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Error
+                            )
+                        }
+                    }
+                }
+
+                if (uiState.isLoading && uiState.agentStepStatus != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = uiState.agentStepStatus,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = OnSurfaceMuted
+                        )
+                    }
+                }
+
+                ChatInputBar(
                     value = messageText,
                     onValueChange = { messageText = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Type a message...") },
-                    enabled = !uiState.isLoading && uiState.pendingConfirmation == null
-                )
-                Button(
-                    onClick = {
+                    onSend = {
                         if (messageText.isNotBlank()) {
                             agentController.sendMessage(messageText)
                             messageText = ""
                         }
                     },
-                    enabled = messageText.isNotBlank() && !uiState.isLoading && uiState.pendingConfirmation == null
-                ) {
-                    Text("Send")
+                    onVoice = { agentController.startVoiceInput() },
+                    enabled = !uiState.isLoading && uiState.pendingConfirmation == null
+                )
+            }
+
+            uiState.pendingConfirmation?.let { pending ->
+                ConfirmationDialog(
+                    pending = pending,
+                    onApprove = { agentController.approvePendingAction() },
+                    onCancel = { agentController.cancelPendingAction() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyChatState() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Primary.copy(alpha = 0.3f), Secondary.copy(alpha = 0.3f))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "PA",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = OnBackground,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "PhoneAgent",
+                style = MaterialTheme.typography.titleLarge,
+                color = OnBackground,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Start a conversation to begin",
+                style = MaterialTheme.typography.bodyMedium,
+                color = OnSurfaceMuted
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChatInputBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onVoice: () -> Unit,
+    enabled: Boolean
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            placeholder = {
+                Text(
+                    "Type a message...",
+                    color = OnSurfaceDim
+                )
+            },
+            enabled = enabled,
+            shape = RoundedCornerShape(24.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Surface,
+                unfocusedContainerColor = Surface,
+                disabledContainerColor = Surface,
+                focusedBorderColor = Primary,
+                unfocusedBorderColor = SurfaceBorder,
+                disabledBorderColor = SurfaceBorder,
+                focusedTextColor = OnBackground,
+                unfocusedTextColor = OnBackground,
+                disabledTextColor = OnSurfaceDim
+            ),
+            maxLines = 4
+        )
+
+        IconButton(
+            onClick = onVoice,
+            enabled = enabled,
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(Surface)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.KeyboardVoice,
+                contentDescription = "Voice input",
+                tint = if (enabled) OnSurface else OnSurfaceDim
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(
+                    brush = Brush.linearGradient(listOf(Primary, Secondary))
+                )
+                .clickable(enabled = enabled && value.isNotBlank()) { onSend() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Send,
+                contentDescription = "Send",
+                tint = OnBackground
+            )
+        }
+    }
+}
+
+@Composable
+private fun StepViewer(
+    steps: List<AgentStep>,
+    showSteps: Boolean,
+    onToggle: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clickable { onToggle() },
+        colors = CardDefaults.cardColors(
+            containerColor = SurfaceElevated
+        ),
+        shape = CardShape
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (showSteps) "Hide steps" else "Show steps (${steps.size})",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Primary
+                )
+                StatusChip(
+                    text = "${steps.size} steps",
+                    isActive = true
+                )
+            }
+            if (showSteps) {
+                Spacer(modifier = Modifier.height(12.dp))
+                steps.forEachIndexed { index, step ->
+                    StepRow(step = step)
+                    if (index < steps.size - 1) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Divider(color = SurfaceBorder, thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
         }
@@ -213,61 +367,102 @@ private fun StepRow(step: AgentStep) {
     Column {
         when (step.action) {
             is AgentAction.ToolCall -> {
-                Text(
-                    text = "Step ${step.stepNumber}: ${step.action.tool}",
-                    style = MaterialTheme.typography.labelSmall
-                )
-                Text(
-                    text = "Args: ${step.action.args}",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Step ${step.stepNumber}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = OnSurfaceMuted
+                    )
+                    Text(
+                        text = step.action.tool,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Secondary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                if (step.action.args.isNotEmpty()) {
+                    Text(
+                        text = step.action.args.entries.joinToString(", ") { "${it.key}=${it.value}" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = OnSurfaceDim,
+                        maxLines = 2
+                    )
+                }
                 val parsed = ToolResultParser.parse(step.observation.orEmpty())
                 val success = parsed.success
                 val error = !parsed.success && parsed.error != null
                 Text(
                     text = when {
-                        success -> "Result: succeeded"
-                        error -> "Result: failed"
-                        else -> "Result: pending"
+                        success -> "Completed"
+                        error -> "Failed"
+                        else -> "Running..."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = when {
-                        success -> MaterialTheme.colorScheme.primary
-                        error -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        success -> Success
+                        error -> Error
+                        else -> OnSurfaceDim
                     }
                 )
                 if (error) {
                     val short = parsed.error.orEmpty().take(200)
                     if (short.isNotBlank()) {
                         Text(
-                            text = "Error: $short",
+                            text = short,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
+                            color = Error,
+                            maxLines = 2
                         )
                     }
                 }
             }
             is AgentAction.FinalAnswer -> {
-                Text(
-                    text = "Step ${step.stepNumber}: final answer",
-                    style = MaterialTheme.typography.labelSmall
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Step ${step.stepNumber}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = OnSurfaceMuted
+                    )
+                    Text(
+                        text = "Final Answer",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Success,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Text(
                     text = step.action.content.take(200),
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurface
                 )
             }
             is AgentAction.ParseError -> {
-                Text(
-                    text = "Step ${step.stepNumber}: parse error",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Step ${step.stepNumber}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = OnSurfaceMuted
+                    )
+                    Text(
+                        text = "Parse Error",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Error,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Text(
                     text = step.action.reason.take(200),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+                    color = Error
                 )
             }
         }

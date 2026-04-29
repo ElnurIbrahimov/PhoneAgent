@@ -4,12 +4,23 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.FrameLayout
-import com.phoneagent.R
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.dp
+import com.phoneagent.ui.theme.*
 
 class FloatingBubbleController(
     private val context: Context,
@@ -31,8 +42,8 @@ class FloatingBubbleController(
         if (bubbleView != null) return
 
         val layoutParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            160,
+            160,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             } else {
@@ -49,10 +60,15 @@ class FloatingBubbleController(
 
         params = layoutParams
 
-        val view = LayoutInflater.from(context).inflate(R.layout.overlay_bubble, null)
-        val bubble = view.findViewById<FrameLayout>(R.id.bubble_container)
+        val composeView = ComposeView(context).apply {
+            setContent {
+                PhoneAgentTheme {
+                    BubbleContent()
+                }
+            }
+        }
 
-        bubble.setOnTouchListener { _, event ->
+        composeView.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = layoutParams.x
@@ -64,7 +80,7 @@ class FloatingBubbleController(
                 MotionEvent.ACTION_MOVE -> {
                     layoutParams.x = initialX + (event.rawX - touchX).toInt()
                     layoutParams.y = initialY + (event.rawY - touchY).toInt()
-                    windowManager.updateViewLayout(view, layoutParams)
+                    windowManager.updateViewLayout(composeView, layoutParams)
                     true
                 }
                 MotionEvent.ACTION_UP -> {
@@ -79,8 +95,8 @@ class FloatingBubbleController(
             }
         }
 
-        bubbleView = view
-        windowManager.addView(view, layoutParams)
+        bubbleView = composeView
+        windowManager.addView(composeView, layoutParams)
     }
 
     fun hide() {
@@ -91,4 +107,27 @@ class FloatingBubbleController(
     }
 
     fun isShowing(): Boolean = bubbleView != null
+}
+
+@Composable
+private fun BubbleContent() {
+    val gradient = Brush.radialGradient(
+        listOf(Primary.copy(alpha = 0.9f), Secondary.copy(alpha = 0.6f))
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(8.dp)
+            .shadow(12.dp, CircleShape)
+            .clip(CircleShape)
+            .background(gradient),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "PA",
+            style = MaterialTheme.typography.titleMedium,
+            color = OnBackground,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+        )
+    }
 }
