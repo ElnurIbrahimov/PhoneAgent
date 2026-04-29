@@ -21,7 +21,11 @@ class OcrManagerImpl : OcrManager {
 
     override suspend fun recognizeText(image: ByteArray): String = withContext(Dispatchers.IO) {
         val bitmap = BitmapFactory.decodeByteArray(image, 0, image.size)
-        recognizeText(bitmap)
+        try {
+            recognizeText(bitmap)
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     override suspend fun recognizeText(bitmap: Bitmap): String = withContext(Dispatchers.IO) {

@@ -15,6 +15,7 @@ class PhoneSendSmsTool : Tool, DescribableTool {
         val message = arguments["message"] ?: return errorResult("Missing 'message'")
         return try {
             val smsManager = SmsManager.getDefault()
+                ?: return errorResult("Device does not support SMS.")
             smsManager.sendTextMessage(phoneNumber, null, message, null, null)
             JSONObject().apply {
                 put("type", "tool_result"); put("tool", name); put("success", true)

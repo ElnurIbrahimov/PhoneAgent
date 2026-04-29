@@ -74,10 +74,11 @@ class ProviderRepository(private val context: Context) {
                 ProviderConfig(
                     id = obj.getString("id"),
                     name = obj.getString("name"),
-                    type = ProviderType.valueOf(obj.getString("type")),
+                    type = runCatching { ProviderType.valueOf(obj.getString("type")) }
+                        .getOrElse { throw IllegalArgumentException("Unknown provider type: ${obj.getString("type")}") },
                     baseUrl = obj.getString("baseUrl"),
-                    apiKey = obj.optString("apiKey", null),
-                    defaultModel = obj.optString("defaultModel", null),
+                    apiKey = if (!obj.isNull("apiKey")) obj.optString("apiKey", "").takeIf { it.isNotBlank() } else null,
+                    defaultModel = if (!obj.isNull("defaultModel")) obj.optString("defaultModel", "").takeIf { it.isNotBlank() } else null,
                     availableModels = obj.optJSONArray("availableModels")?.let { arr ->
                         List(arr.length()) { arr.getString(it) }
                     } ?: emptyList(),
@@ -86,6 +87,7 @@ class ProviderRepository(private val context: Context) {
                 )
             }
         } catch (e: Exception) {
+            android.util.Log.e("ProviderRepository", "Failed to parse providers JSON, using defaults", e)
             defaultProviders
         }
     }

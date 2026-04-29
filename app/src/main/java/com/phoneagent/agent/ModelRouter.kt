@@ -16,10 +16,14 @@ class ModelRouter(
     suspend fun getProviderForModel(model: String): AiProvider {
         val providers = providerRepository.providers.first()
         val providerConfig = providers.find { it.availableModels.contains(model) && it.isEnabled }
+        if (providerConfig == null) {
+            android.util.Log.w("ModelRouter", "Model '$model' not found in any enabled provider, falling back to default")
+        }
+        val selectedConfig = providerConfig
             ?: providers.firstOrNull { it.isEnabled }
             ?: throw IllegalStateException("No enabled provider available. Configure a provider in Settings.")
 
-        return createProvider(injectApiKey(providerConfig))
+        return createProvider(injectApiKey(selectedConfig))
     }
 
     suspend fun getDefaultProvider(): AiProvider {

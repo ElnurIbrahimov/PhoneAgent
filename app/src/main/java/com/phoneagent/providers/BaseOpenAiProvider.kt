@@ -124,13 +124,18 @@ abstract class BaseOpenAiProvider : AiProvider {
 
     protected open fun parseResponse(jsonString: String): AgentResponse {
         val json = JSONObject(jsonString)
-        val choices = json.getJSONArray("choices")
-        val message = choices.getJSONObject(0).getJSONObject("message")
-        val content = message.getString("content")
+        val choices = json.optJSONArray("choices")
+            ?: throw ProviderError.UnknownError("Invalid response: missing 'choices' array")
+        if (choices.length() == 0) throw ProviderError.UnknownError("Empty response: no choices returned")
+        val message = choices.getJSONObject(0).optJSONObject("message")
+            ?: throw ProviderError.UnknownError("Invalid response: missing 'message' object")
+        val content = message.optString("content", "")
+        val finishReason = choices.getJSONObject(0).optString("finish_reason", null)
         val model = json.optString("model", "unknown")
         return AgentResponse(
             content = content,
-            model = model
+            model = model,
+            finishReason = finishReason
         )
     }
 

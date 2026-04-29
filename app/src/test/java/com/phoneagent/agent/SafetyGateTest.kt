@@ -79,8 +79,37 @@ class SafetyGateTest {
     }
 
     @Test
-    fun `phone system info returns LOW risk`() {
-        val result = SafetyGate.assess("phone.system_info", emptyMap())
+    fun `phone clipboard returns MEDIUM risk`() {
+        val result = SafetyGate.assess("phone.clipboard", mapOf("action" to "read"))
+        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
+    }
+
+    @Test
+    fun `phone settings returns LOW risk`() {
+        val result = SafetyGate.assess("phone.settings", mapOf("page" to "wifi"))
         assertEquals(SafetyGate.RiskLevel.LOW, result.level)
     }
-}
+
+    @Test
+    fun `accessibility tap requires confirmation for safety`() {
+        val result = SafetyGate.assess("accessibility.tap_text", mapOf("text" to "Buy"))
+        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
+    }
+
+    @Test
+    fun `click_selector with card in selector name does not trigger false positive`() {
+        val result = SafetyGate.assess("browser.click_selector", mapOf("selector" to "#product-card"))
+        assertEquals(SafetyGate.RiskLevel.LOW, result.level)
+    }
+
+    @Test
+    fun `accessibility swipe requires confirmation for safety`() {
+        val result = SafetyGate.assess("accessibility.swipe", mapOf("direction" to "up"))
+        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
+    }
+
+    @Test
+    fun `accessibility type requires confirmation for safety`() {
+        val result = SafetyGate.assess("accessibility.type", mapOf("text" to "hello"))
+        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
+    }

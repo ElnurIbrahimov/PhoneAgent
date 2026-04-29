@@ -60,7 +60,8 @@ Rules:
                 sb.appendLine("Step ${step.stepNumber}:")
                 when (step.action) {
                     is AgentAction.ToolCall -> {
-                        sb.appendLine("Action: {\"type\":\"tool_call\",\"tool\":\"${step.action.tool}\",\"args\":${step.action.args}}")
+                        val argsJson = JSONObject(step.action.args).toString()
+                        sb.appendLine("Action: {\"type\":\"tool_call\",\"tool\":\"${step.action.tool}\",\"args\":$argsJson}")
                         val rawObs = step.observation ?: "none"
                         val suggestion = extractSuggestion(rawObs)
                         val obsText = rawObs.take(4000)

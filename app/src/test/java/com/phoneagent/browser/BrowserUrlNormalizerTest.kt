@@ -42,6 +42,16 @@ class BrowserUrlNormalizerTest {
     }
 
     @Test
+    fun `normalize rejects blob scheme`() {
+        assertNull(BrowserUrlNormalizer.normalize("blob:https://evil.com/abc-123"))
+    }
+
+    @Test
+    fun `normalize rejects filesystem scheme`() {
+        assertNull(BrowserUrlNormalizer.normalize("filesystem:https://evil.com/temporary/"))
+    }
+
+    @Test
     fun `normalize returns null for blank input`() {
         assertNull(BrowserUrlNormalizer.normalize(""))
         assertNull(BrowserUrlNormalizer.normalize("   "))

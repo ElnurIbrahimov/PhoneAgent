@@ -2,7 +2,7 @@ package com.phoneagent.browser
 
 object BrowserUrlNormalizer {
 
-    private val DANGEROUS_SCHEMES = setOf("javascript", "data", "file", "content", "intent")
+    private val DANGEROUS_SCHEMES = setOf("javascript", "data", "file", "content", "intent", "blob", "filesystem")
 
     fun normalize(input: String): String? {
         val trimmed = input.trim()

@@ -70,12 +70,17 @@ class AgentAccessibilityService : AccessibilityService() {
     fun findAndTap(text: String): Boolean {
         val root = rootInActiveWindow ?: return false
         val node = findNodeByText(root, text)
-        root.recycle()
+        if (node != null && node !== root) {
+            root.recycle()
+        }
         if (node != null) {
             performTapOnNode(node)
-            node.recycle()
+            if (node !== root) {
+                node.recycle()
+            }
             return true
         }
+        root.recycle()
         return false
     }
 
@@ -144,7 +149,7 @@ class AgentAccessibilityService : AccessibilityService() {
     private fun findNodeByText(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
         if (node.text?.toString()?.contains(text, ignoreCase = true) == true ||
             node.contentDescription?.toString()?.contains(text, ignoreCase = true) == true) {
-            if (node.isClickable) return node
+            return node
         }
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
@@ -156,13 +161,23 @@ class AgentAccessibilityService : AccessibilityService() {
     }
 
     private fun performTapOnNode(node: AccessibilityNodeInfo): Boolean {
-        if (node.isClickable) return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        val parent = node.parent
-        if (parent != null) {
-            val result = parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            parent.recycle()
-            return result
+        var current: AccessibilityNodeInfo? = node
+        while (current != null && !current.isClickable) {
+            val parent = current.parent
+            if (parent !== current) {
+                current.recycle()
+                current = parent
+            } else {
+                current.recycle()
+                return false
+            }
         }
-        return false
+        return if (current != null) {
+            val result = current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            current.recycle()
+            result
+        } else {
+            false
+        }
     }
 }

@@ -15,7 +15,7 @@ class PhoneCallTool(private val context: Context) : Tool, DescribableTool {
     override suspend fun execute(arguments: Map<String, String>): String {
         val phoneNumber = arguments["phone_number"] ?: return errorResult("Missing 'phone_number'")
         return try {
-            val intent = Intent(Intent.ACTION_CALL).apply {
+            val intent = Intent(Intent.ACTION_DIAL).apply {
                 data = Uri.parse("tel:$phoneNumber")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }

@@ -44,11 +44,17 @@ fun AgentWebView(
                     loadsImagesAutomatically = true
                     useWideViewPort = true
                     loadWithOverviewMode = true
+                    allowFileAccess = false
+                    allowContentAccess = false
                 }
 
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                        request?.url?.let { view?.loadUrl(it.toString()) }
+                        val url = request?.url?.toString() ?: return false
+                        val normalized = BrowserUrlNormalizer.normalize(url)
+                        if (normalized != null) {
+                            view?.loadUrl(normalized)
+                        }
                         return true
                     }
 

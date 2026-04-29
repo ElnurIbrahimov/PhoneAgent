@@ -16,7 +16,7 @@ object SafetyGate {
         "browser.scroll", "browser.back", "browser.reload",
         "phone.list_apps", "phone.system_info", "phone.notifications",
         "phone.screenshot", "accessibility.read_tree", "accessibility.foreground_app",
-        "phone.clipboard", "phone.settings"
+        "phone.settings"
     )
 
     private val highRiskTools = setOf("phone.open_app", "phone.send_sms", "phone.call")
@@ -24,7 +24,8 @@ object SafetyGate {
         "browser.click_text", "browser.click_selector",
         "browser.type_into_selector", "browser.type_into_focused",
         "accessibility.tap_text", "accessibility.tap_at", "accessibility.swipe",
-        "accessibility.type", "accessibility.back", "accessibility.home"
+        "accessibility.type", "accessibility.back", "accessibility.home",
+        "phone.clipboard"
     )
 
     private val sensitiveWordRegex = Regex(
@@ -33,7 +34,7 @@ object SafetyGate {
     )
 
     private val sensitiveSelectorRegex = Regex(
-        "\\.submit|#submit|\\.delete|#delete|\\.confirm|#confirm",
+        "(?:\\.|#)(submit|delete|confirm|purchase)",
         RegexOption.IGNORE_CASE
     )
 
@@ -45,8 +46,7 @@ object SafetyGate {
             args["selector"]?.let { sel ->
                 sensitiveSelectorRegex.containsMatchIn(sel) ||
                 sel.contains("password", ignoreCase = true) ||
-                sel.contains("credit", ignoreCase = true) ||
-                sel.contains("card", ignoreCase = true)
+                sel.contains("credit", ignoreCase = true)
             } ?: false
         },
         "browser.type_into_selector" to { args ->
