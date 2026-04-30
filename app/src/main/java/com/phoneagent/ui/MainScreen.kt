@@ -31,7 +31,8 @@ fun MainScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToPermissions: () -> Unit,
     onNavigateToChat: () -> Unit,
-    onNavigateToHistory: () -> Unit
+    onNavigateToHistory: () -> Unit,
+    onNavigateToMemory: () -> Unit
 ) {
     val context = LocalContext.current
     var overlayRunning by remember { mutableStateOf(OverlayService.isRunning) }
@@ -123,6 +124,13 @@ fun MainScreen(
                     subtitle = "View past agent tasks",
                     gradient = null,
                     onClick = onNavigateToHistory
+                ),
+                ActionCardData(
+                    icon = Icons.Default.Memory,
+                    title = "Memory Browser",
+                    subtitle = "Beliefs, memories, daemon",
+                    gradient = null,
+                    onClick = onNavigateToMemory
                 )
             )
 

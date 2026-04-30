@@ -6,15 +6,18 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import com.phoneagent.agent.AgentController
+import com.phoneagent.soma.daemon.DaemonWorker
+import com.phoneagent.soma.ground.GroundWorker
 
 class PhoneAgentApplication : Application() {
 
     lateinit var agentController: AgentController
-        private set
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        DaemonWorker.schedule(this)
+        GroundWorker.schedule(this)
     }
 
     private fun createNotificationChannel() {

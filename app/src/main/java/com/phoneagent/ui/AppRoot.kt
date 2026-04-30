@@ -56,7 +56,8 @@ fun AppRoot(agentController: AgentController) {
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToPermissions = { navController.navigate("permissions") },
                 onNavigateToChat = { navController.navigate("chat") },
-                onNavigateToHistory = { navController.navigate("history") }
+                onNavigateToHistory = { navController.navigate("history") },
+                onNavigateToMemory = { navController.navigate("memory") }
             )
         }
         composable(
@@ -105,6 +106,18 @@ fun AppRoot(agentController: AgentController) {
             popExitTransition = { PhoneAgentPopExitTransition }
         ) {
             TaskHistoryScreen(
+                agentController = agentController,
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            "memory",
+            enterTransition = { PhoneAgentEnterTransition },
+            exitTransition = { PhoneAgentExitTransition },
+            popEnterTransition = { PhoneAgentPopEnterTransition },
+            popExitTransition = { PhoneAgentPopExitTransition }
+        ) {
+            MemoryBrowserScreen(
                 agentController = agentController,
                 onBack = { navController.popBackStack() }
             )

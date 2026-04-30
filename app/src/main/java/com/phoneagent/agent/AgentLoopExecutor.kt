@@ -21,7 +21,8 @@ class AgentLoopExecutor(
     private val applyState: ((AgentUiState) -> AgentUiState) -> Unit,
     private val screenCaptureManager: ScreenCaptureManager? = null,
     private val ocrManager: OcrManager? = null,
-    private val onSpeak: ((String) -> Unit)? = null
+    private val onSpeak: ((String) -> Unit)? = null,
+    private val onSessionComplete: (suspend (taskId: String, answer: String) -> Unit)? = null
 ) {
 
     companion object {
@@ -249,6 +250,7 @@ class AgentLoopExecutor(
         onComplete()
 
         taskHistoryManager.recordMessage(message, answer, model)
+        onSessionComplete?.invoke(taskId, answer)
         onSpeak?.let { speak ->
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                 speak(answer.take(500))
