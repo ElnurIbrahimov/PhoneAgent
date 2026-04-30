@@ -22,6 +22,9 @@ class AccessibilitySwipeTool : Tool, DescribableTool {
             }
             if (success) ToolResult.success(name, "Swiped $direction") else ToolResult.error(name, "Swipe $direction failed.",
                 "Try accessibility.read_tree to verify the screen has scrollable content.")
+        } catch (e: RuntimeException) {
+            ToolResult.error(name, "Accessibility service disconnected. Ask the user to re-enable it.",
+                "The accessibility service may have been stopped by the system.")
         } catch (e: Exception) {
             ToolResult.error(name, e.message ?: "Swipe failed",
                 "Try accessibility.read_tree to verify the screen has scrollable content.")

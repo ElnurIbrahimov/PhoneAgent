@@ -2,8 +2,6 @@ package com.phoneagent.agent.tools
 
 import android.content.Context
 import android.content.Intent
-import android.hardware.camera2.CameraManager
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
 import com.phoneagent.agent.DescribableTool

@@ -20,7 +20,6 @@ import com.phoneagent.agent.tools.PhoneSendSmsTool
 import com.phoneagent.agent.tools.PhoneSettingsTool
 import com.phoneagent.agent.tools.PhoneSystemInfoTool
 import com.phoneagent.browser.BrowserTool
-import com.phoneagent.overlay.OverlayState
 import com.phoneagent.memory.AppDatabase
 import com.phoneagent.memory.MemoryRepository
 import com.phoneagent.perception.OcrManager
@@ -31,6 +30,7 @@ import com.phoneagent.voice.VoiceInputManager
 import com.phoneagent.voice.VoiceInputManagerImpl
 import com.phoneagent.perception.ScreenCaptureManager
 import com.phoneagent.perception.ScreenCaptureManagerImpl
+import com.phoneagent.perception.VisionPayloadBuilder
 import com.phoneagent.providers.ProviderRepository
 import com.phoneagent.security.AndroidKeystoreSecretStore
 import com.phoneagent.security.SecretStore
@@ -60,9 +60,6 @@ class AgentController(context: Context) {
     private val _uiState = MutableStateFlow(AgentUiState())
     val uiState: StateFlow<AgentUiState> = _uiState.asStateFlow()
 
-    private val _overlayState = MutableStateFlow<OverlayState>(OverlayState.Hidden)
-    val overlayState: StateFlow<OverlayState> = _overlayState.asStateFlow()
-
     val toolRegistry = ToolRegistry()
 
     private val screenCaptureManager: ScreenCaptureManager = ScreenCaptureManagerImpl(context)
@@ -75,8 +72,7 @@ class AgentController(context: Context) {
     var onVoiceError: ((String) -> Unit)? = null
 
     private val loopExecutor: AgentLoopExecutor
-    @Volatile
-    private var loopRunning = false
+    private val loopRunning = java.util.concurrent.atomic.AtomicBoolean(false)
 
     init {
         val browserTool = BrowserTool(context)
@@ -111,7 +107,8 @@ class AgentController(context: Context) {
                 BrowserActionTool("browser.type_into_focused", "Type text into the currently focused input element.", browserTool, "type_into_focused", "text (String)"),
                 BrowserActionTool("browser.scroll", "Scroll the page up or down.", browserTool, "scroll", "direction (String: up/down)"),
                 BrowserActionTool("browser.back", "Go back in browser history.", browserTool, "back", ""),
-                BrowserActionTool("browser.reload", "Reload the current page.", browserTool, "reload", "")
+                BrowserActionTool("browser.reload", "Reload the current page.", browserTool, "reload", ""),
+                BrowserActionTool("browser.read_summary", "Read a combined summary of the current page including text excerpt, title, links, buttons, and inputs.", browserTool, "read_summary", "")
             )
         )
 
@@ -120,7 +117,8 @@ class AgentController(context: Context) {
             toolRegistry = toolRegistry,
             taskHistoryManager = taskHistoryManager,
             applyState = { block -> _uiState.update(block) },
-            screenCaptureManager = screenCaptureManager
+            screenCaptureManager = screenCaptureManager,
+            onSpeak = { text -> speakResponse(text) }
         )
 
         scope.launch {
@@ -142,11 +140,10 @@ class AgentController(context: Context) {
             return
         }
 
-        if (loopRunning) {
+        if (!loopRunning.compareAndSet(false, true)) {
             _uiState.update { it.copy(error = "Agent is busy. Wait for current task to complete.") }
             return
         }
-        loopRunning = true
 
         _uiState.update {
             it.copy(
@@ -159,31 +156,34 @@ class AgentController(context: Context) {
             )
         }
 
-        val systemPrompt = AgentPromptBuilder.buildSystemPrompt(toolRegistry.listTools())
+        val baseSystemPrompt = AgentPromptBuilder.buildSystemPrompt(toolRegistry.listTools())
+        val systemPrompt = if (screenCaptureManager != null) {
+            VisionPayloadBuilder().buildVisionSystemPrompt(baseSystemPrompt)
+        } else baseSystemPrompt
         loopExecutor.startLoop(
             message = message,
             model = selectedModel,
             systemPrompt = systemPrompt,
-            onComplete = { loopRunning = false }
+            onComplete = { loopRunning.set(false) }
         )
     }
 
     fun approvePendingAction() {
         val pending = _uiState.value.pendingConfirmation ?: return
         _uiState.update { it.copy(pendingConfirmation = null) }
-        loopRunning = true
-        loopExecutor.resumeAfterConfirmation(pending, approved = true, onComplete = { loopRunning = false })
+        loopRunning.set(true)
+        loopExecutor.resumeAfterConfirmation(pending, approved = true, onComplete = { loopRunning.set(false) })
     }
 
     fun cancelPendingAction() {
         val pending = _uiState.value.pendingConfirmation ?: return
         _uiState.update { it.copy(pendingConfirmation = null) }
-        loopRunning = true
-        loopExecutor.resumeAfterConfirmation(pending, approved = false, onComplete = { loopRunning = false })
+        loopRunning.set(true)
+        loopExecutor.resumeAfterConfirmation(pending, approved = false, onComplete = { loopRunning.set(false) })
     }
 
     fun clearChat() {
-        loopRunning = false
+        loopRunning.set(false)
         _uiState.update {
             it.copy(
                 messages = emptyList(),
@@ -197,10 +197,6 @@ class AgentController(context: Context) {
 
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
-    }
-
-    fun setOverlayState(state: OverlayState) {
-        _overlayState.value = state
     }
 
     suspend fun storeApiKey(providerId: String, apiKey: String) {

@@ -14,6 +14,9 @@ class AccessibilityForegroundTool : Tool, DescribableTool {
                 ?: return ToolResult.error(name, "Accessibility service not running.")
             val pkg = service.getForegroundPackage() ?: "Unknown"
             ToolResult.success(name, "Foreground app: $pkg")
+        } catch (e: RuntimeException) {
+            ToolResult.error(name, "Accessibility service disconnected. Ask the user to re-enable it.",
+                "The accessibility service may have been stopped by the system.")
         } catch (e: Exception) {
             ToolResult.error(name, e.message ?: "Failed to get foreground app")
         }

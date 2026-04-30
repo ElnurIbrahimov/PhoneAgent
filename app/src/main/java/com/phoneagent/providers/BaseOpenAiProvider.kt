@@ -37,11 +37,11 @@ abstract class BaseOpenAiProvider : AiProvider {
 
         try {
             client.newCall(httpRequest).execute().use { response ->
+                val bodyString = response.body?.string() ?: throw ProviderError.UnknownError("Empty response")
                 if (!response.isSuccessful) {
-                    throw mapHttpError(response.code, response.body?.string() ?: "Unknown error")
+                    throw mapHttpError(response.code, bodyString)
                 }
-                val responseBody = response.body?.string() ?: throw ProviderError.UnknownError("Empty response")
-                parseResponse(responseBody)
+                parseResponse(bodyString)
             }
         } catch (e: IOException) {
             throw ProviderError.NetworkError(e.message ?: "Network error")
@@ -89,7 +89,16 @@ abstract class BaseOpenAiProvider : AiProvider {
         if (request.visionPayload != null) {
             messages.put(JSONObject().apply {
                 put("role", "user")
-                put("content", JSONArray(request.visionPayload))
+                put("content", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("type", "text")
+                        put("text", request.message)
+                    })
+                    val visionArr = JSONArray(request.visionPayload)
+                    for (i in 0 until visionArr.length()) {
+                        put(visionArr.get(i))
+                    }
+                })
             })
         } else {
             messages.put(JSONObject().apply {
@@ -130,7 +139,10 @@ abstract class BaseOpenAiProvider : AiProvider {
         val message = choices.getJSONObject(0).optJSONObject("message")
             ?: throw ProviderError.UnknownError("Invalid response: missing 'message' object")
         val content = message.optString("content", "")
-        val finishReason = choices.getJSONObject(0).optString("finish_reason", null)
+        val finishReason = choices.getJSONObject(0).optString("finish_reason", "stop")
+        if (finishReason == "content_filter") {
+            throw ProviderError.InvalidRequestError("Content filtered by provider safety system.")
+        }
         val model = json.optString("model", "unknown")
         return AgentResponse(
             content = content,
@@ -142,6 +154,9 @@ abstract class BaseOpenAiProvider : AiProvider {
     protected open fun mapHttpError(code: Int, body: String): ProviderError {
         return when (code) {
             401 -> ProviderError.AuthenticationError("Invalid API key")
+            403 -> ProviderError.AuthenticationError("Access denied. Check your API subscription.")
+            404 -> ProviderError.InvalidRequestError("Endpoint not found. Check your base URL and model name.")
+            408 -> ProviderError.NetworkError("Request timed out. The server took too long to respond.")
             429 -> ProviderError.RateLimitError("Rate limit exceeded")
             400, 422 -> ProviderError.InvalidRequestError(body)
             in 500..599 -> ProviderError.ServerError("Server error: $code")

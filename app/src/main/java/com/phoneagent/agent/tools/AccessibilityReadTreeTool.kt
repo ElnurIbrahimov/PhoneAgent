@@ -15,6 +15,9 @@ class AccessibilityReadTreeTool : Tool, DescribableTool {
                     "Tell the user to enable it in Settings > Accessibility > PhoneAgent")
             val tree = service.readUITree()
             ToolResult.success(name, tree)
+        } catch (e: RuntimeException) {
+            ToolResult.error(name, "Accessibility service disconnected. Ask the user to re-enable it.",
+                "The accessibility service may have been stopped by the system.")
         } catch (e: Exception) {
             ToolResult.error(name, e.message ?: "Failed to read UI tree",
                 "Try accessibility.foreground_app to check what app is currently open.")

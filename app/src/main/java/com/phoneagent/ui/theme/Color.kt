@@ -21,7 +21,7 @@ val Info = Color(0xFF3B82F6)
 val OnBackground = Color(0xFFE2E2E5)
 val OnSurface = Color(0xFFF0F0F3)
 val OnSurfaceMuted = Color(0xFFA0A0A8)
-val OnSurfaceDim = Color(0xFF6B6B74)
+val OnSurfaceDim = Color(0xFF8E8E99)
 
 val UserBubbleStart = Color(0x408B5CF6)
 val UserBubbleEnd = Color(0x406366F1)

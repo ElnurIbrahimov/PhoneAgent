@@ -1,5 +1,7 @@
 package com.phoneagent.agent
 
+import java.util.concurrent.ConcurrentHashMap
+
 interface Tool {
     val name: String
     val description: String
@@ -8,7 +10,7 @@ interface Tool {
 
 class ToolRegistry {
 
-    private val tools = mutableMapOf<String, Tool>()
+    private val tools = ConcurrentHashMap<String, Tool>()
 
     fun register(tool: Tool) {
         tools[tool.name] = tool

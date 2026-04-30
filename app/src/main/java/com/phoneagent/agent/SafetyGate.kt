@@ -15,11 +15,10 @@ object SafetyGate {
         "browser.open_url", "browser.read_page", "browser.read_metadata",
         "browser.scroll", "browser.back", "browser.reload",
         "phone.list_apps", "phone.system_info", "phone.notifications",
-        "phone.screenshot", "accessibility.read_tree", "accessibility.foreground_app",
-        "phone.settings"
+        "phone.screenshot", "accessibility.read_tree", "accessibility.foreground_app"
     )
 
-    private val highRiskTools = setOf("phone.open_app", "phone.send_sms", "phone.call")
+    private val highRiskTools = setOf("phone.open_app", "phone.send_sms", "phone.call", "phone.settings")
     private val mediumRiskTools = setOf(
         "browser.click_text", "browser.click_selector",
         "browser.type_into_selector", "browser.type_into_focused",

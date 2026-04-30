@@ -35,10 +35,11 @@ fun parseAgentResponse(content: String): AgentAction {
         val json = JSONObject(jsonString)
         when (json.optString("type")) {
             "final_answer" -> {
-                if (!json.has("content")) {
+                val content = json.optString("content", null)
+                if (content == null || json.isNull("content")) {
                     AgentAction.ParseError("final_answer is missing required 'content' field.")
                 } else {
-                    AgentAction.FinalAnswer(json.getString("content"))
+                    AgentAction.FinalAnswer(content)
                 }
             }
             "tool_call" -> {

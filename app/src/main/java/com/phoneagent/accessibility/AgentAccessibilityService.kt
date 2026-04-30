@@ -70,13 +70,10 @@ class AgentAccessibilityService : AccessibilityService() {
     fun findAndTap(text: String): Boolean {
         val root = rootInActiveWindow ?: return false
         val node = findNodeByText(root, text)
-        if (node != null && node !== root) {
-            root.recycle()
-        }
         if (node != null) {
             performTapOnNode(node)
             if (node !== root) {
-                node.recycle()
+                root.recycle()
             }
             return true
         }

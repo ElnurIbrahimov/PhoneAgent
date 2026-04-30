@@ -1,5 +1,6 @@
 package com.phoneagent.agent
 
+import com.phoneagent.agent.tools.ToolResult
 import com.phoneagent.providers.AiProvider
 import com.phoneagent.providers.ProviderError
 import com.phoneagent.perception.ScreenCaptureManager
@@ -11,14 +12,14 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
-import org.json.JSONObject
 
 class AgentLoopExecutor(
     private val modelRouter: ModelRouter,
     private val toolRegistry: ToolRegistry,
     private val taskHistoryManager: TaskHistoryManager,
     private val applyState: ((AgentUiState) -> AgentUiState) -> Unit,
-    private val screenCaptureManager: ScreenCaptureManager? = null
+    private val screenCaptureManager: ScreenCaptureManager? = null,
+    private val onSpeak: ((String) -> Unit)? = null
 ) {
 
     companion object {
@@ -50,8 +51,8 @@ class AgentLoopExecutor(
             val steps = initialSteps.toMutableList()
 
             try {
-                val provider = modelRouter.getProviderForModel(model)
-                executeSteps(provider, taskId, message, model, systemPrompt, steps, onComplete)
+                val providers = modelRouter.getAllProvidersForModel(model)
+                executeSteps(providers, taskId, message, model, systemPrompt, steps, onComplete)
             } catch (e: ProviderError) {
                 val message = when (e) {
                     is com.phoneagent.providers.ProviderError.AuthenticationError ->
@@ -65,11 +66,13 @@ class AgentLoopExecutor(
                     else -> e.message ?: "Unknown provider error"
                 }
                 applyState { it.copy(isLoading = false, agentStepStatus = null, error = message) }
+                taskHistoryManager.recordSteps(taskId, steps)
                 taskHistoryManager.updateTaskStatus(taskId, "failed", message)
                 onComplete()
             } catch (e: Exception) {
                 val message = e.message ?: "Unexpected error"
                 applyState { it.copy(isLoading = false, agentStepStatus = null, error = message) }
+                taskHistoryManager.recordSteps(taskId, steps)
                 taskHistoryManager.updateTaskStatus(taskId, "failed", message)
                 onComplete()
             }
@@ -77,7 +80,7 @@ class AgentLoopExecutor(
     }
 
     private suspend fun executeSteps(
-        provider: AiProvider,
+        providers: List<AiProvider>,
         taskId: String,
         message: String,
         model: String,
@@ -95,16 +98,26 @@ class AgentLoopExecutor(
 
             val loopMessage = AgentPromptBuilder.buildLoopMessage(message, steps)
 
-            val visionPayload = try {
-                val bytes = screenCaptureManager?.captureScreenshot()
-                if (bytes != null) {
-                    val encoder = VisionPayloadBuilder()
-                    encoder.buildVisionContextPayload(
-                        VisionPayloadBuilder.encodeImage(bytes),
-                        "User request: $message"
-                    )
-                } else null
-            } catch (_: Exception) { null }
+            val uiModifyingTools = setOf("phone.open_app", "phone.settings", "accessibility.tap_text",
+                "accessibility.tap_at", "accessibility.swipe", "accessibility.back",
+                "accessibility.home", "browser.open_url", "browser.click_text",
+                "browser.click_selector", "accessibility.type")
+            val lastStep = steps.lastOrNull()
+            val uiChanged = lastStep?.action is AgentAction.ToolCall && lastStep.action.tool in uiModifyingTools
+            val shouldSendScreenshot = (stepsTaken <= 1) || uiChanged || (stepsTaken % 3 == 0)
+
+            val visionPayload = if (shouldSendScreenshot) {
+                try {
+                    val bytes = screenCaptureManager?.captureScreenshot()
+                    if (bytes != null) {
+                        val encoder = VisionPayloadBuilder()
+                        encoder.buildVisionContextPayload(
+                            VisionPayloadBuilder.encodeImage(bytes),
+                            "User request: $message"
+                        )
+                    } else null
+                } catch (_: Exception) { null }
+            } else null
 
             val request = AgentRequest(
                 message = loopMessage,
@@ -115,10 +128,33 @@ class AgentLoopExecutor(
                 visionPayload = visionPayload
             )
 
-            val response = withTimeout(MODEL_TIMEOUT_MS) {
-                provider.chatCompletion(request)
+            var response: AgentResponse? = null
+            var lastProviderError: String? = null
+
+            for (p in providers) {
+                try {
+                    response = withTimeout(MODEL_TIMEOUT_MS) {
+                        p.chatCompletion(request)
+                    }
+                    break
+                } catch (e: ProviderError) {
+                    lastProviderError = e.message
+                    continue
+                } catch (e: Exception) {
+                    lastProviderError = e.message
+                    continue
+                }
             }
-            val action = parseAgentResponse(response.content)
+
+            if (response == null) {
+                val errorMsg = "All providers failed. Last error: ${lastProviderError ?: "Unknown"}"
+                applyState { it.copy(isLoading = false, agentStepStatus = null, error = errorMsg) }
+                taskHistoryManager.updateTaskStatus(taskId, "failed", errorMsg)
+                onComplete()
+                return
+            }
+
+            val action = parseAgentResponse(response!!.content)
 
             when (action) {
                 is AgentAction.FinalAnswer -> {
@@ -142,7 +178,7 @@ class AgentLoopExecutor(
                             systemPrompt = systemPrompt,
                             selectedModel = model
                         )
-                        steps.add(AgentStep(stepsTaken, action, observation = buildErrorJson(action.tool, "Waiting for user confirmation.", "Approve or deny the pending action to continue.")))
+                        steps.add(AgentStep(stepsTaken, action, observation = ToolResult.error(action.tool, "Waiting for user confirmation.", "Approve or deny the pending action to continue.")))
                         applyState {
                             it.copy(
                                 agentStepStatus = "Waiting for confirmation",
@@ -172,7 +208,7 @@ class AgentLoopExecutor(
                         applyState { it.copy(agentStepStatus = "Done", currentSteps = steps.toList()) }
                         break
                     }
-                    val errorObs = buildErrorJson("parse", action.reason, "Check your JSON format and try again.")
+                    val errorObs = ToolResult.error("parse", action.reason, "Check your JSON format and try again.")
                     steps.add(AgentStep(stepsTaken, action, errorObs))
                     applyState { it.copy(agentStepStatus = "Parse error, retrying...", currentSteps = steps.toList()) }
                 }
@@ -193,6 +229,13 @@ class AgentLoopExecutor(
 
         onComplete()
 
+        taskHistoryManager.recordMessage(message, answer, model)
+        onSpeak?.let { speak ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                speak(answer.take(500))
+            }
+        }
+
         taskHistoryManager.updateTaskStatus(taskId, "completed", answer)
         taskHistoryManager.recordSteps(taskId, steps)
     }
@@ -206,14 +249,14 @@ class AgentLoopExecutor(
                 val observation = executeTool(pending.toolName, pending.args)
                 steps.add(AgentStep(steps.size + 1, AgentAction.ToolCall(pending.toolName, pending.args), observation))
             } else {
-                val cancelObs = buildErrorJson(pending.toolName, "User canceled the action.", "Consider an alternative approach to complete the task.")
+                val cancelObs = ToolResult.error(pending.toolName, "User canceled the action.", "Consider an alternative approach to complete the task.")
                 steps.add(AgentStep(steps.size + 1, AgentAction.ToolCall(pending.toolName, pending.args), cancelObs))
                 applyState { it.copy(isLoading = true, agentStepStatus = "Thinking", pendingConfirmation = null, currentSteps = steps.toList()) }
             }
 
             try {
-                val provider = modelRouter.getProviderForModel(pending.selectedModel)
-                executeSteps(provider, pending.taskId, pending.userRequest, pending.selectedModel, pending.systemPrompt, steps, onComplete, steps.size)
+                val providers = modelRouter.getAllProvidersForModel(pending.selectedModel)
+                executeSteps(providers, pending.taskId, pending.userRequest, pending.selectedModel, pending.systemPrompt, steps, onComplete, steps.size)
             } catch (e: ProviderError) {
                 val message = when (e) {
                     is com.phoneagent.providers.ProviderError.AuthenticationError ->
@@ -239,7 +282,7 @@ class AgentLoopExecutor(
 
     private suspend fun executeTool(toolName: String, args: Map<String, String>): String {
         val tool = toolRegistry.getTool(toolName)
-            ?: return buildErrorJson(toolName, "Unknown tool: $toolName", "Use only the tools listed in the system prompt.")
+            ?: return ToolResult.error(toolName, "Unknown tool: $toolName", "Use only the tools listed in the system prompt.")
 
         var attempt = 0
         val maxRetries = 2
@@ -256,19 +299,9 @@ class AgentLoopExecutor(
                 }
             }
         }
-        return buildErrorJson(toolName, lastError ?: "Execution failed after $maxRetries retries", "Try a different approach or report the issue to the user.")
+        return ToolResult.error(toolName, lastError ?: "Execution failed after $maxRetries retries", "Try a different approach or report the issue to the user.")
     }
 
-    private fun buildErrorJson(tool: String, error: String, suggestion: String? = null): String {
-        return JSONObject().apply {
-            put("type", "tool_result")
-            put("tool", tool)
-            put("success", false)
-            put("content", JSONObject.NULL)
-            put("error", error)
-            put("suggestion", suggestion ?: JSONObject.NULL)
-        }.toString()
-    }
 
     fun destroy() {
         scope.cancel()

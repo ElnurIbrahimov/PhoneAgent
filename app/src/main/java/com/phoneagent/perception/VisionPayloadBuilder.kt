@@ -16,7 +16,7 @@ class VisionPayloadBuilder {
             put("type", "image_url")
             put("image_url", JSONObject().apply {
                 put("url", "data:image/jpeg;base64,$imageBase64")
-                put("detail", "high")
+                put("detail", "low")
             })
         })
         return contentArray.toString()
@@ -32,7 +32,7 @@ class VisionPayloadBuilder {
             put("type", "image_url")
             put("image_url", JSONObject().apply {
                 put("url", "data:image/jpeg;base64,$imageBase64")
-                put("detail", "high")
+                put("detail", "low")
             })
         })
         return contentArray.toString()

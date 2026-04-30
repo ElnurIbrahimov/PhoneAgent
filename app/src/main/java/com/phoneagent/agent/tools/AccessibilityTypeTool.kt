@@ -18,6 +18,9 @@ class AccessibilityTypeTool : Tool, DescribableTool {
             if (service.typeText(text)) ToolResult.success(name, "Typed text into focused field.")
             else ToolResult.error(name, "No focused input field found.",
                 "Use accessibility.tap_text to tap an input field first, then try typing.")
+        } catch (e: RuntimeException) {
+            ToolResult.error(name, "Accessibility service disconnected. Ask the user to re-enable it.",
+                "The accessibility service may have been stopped by the system.")
         } catch (e: Exception) {
             ToolResult.error(name, e.message ?: "Type failed",
                 "Use accessibility.tap_text to tap an input field first, then try typing.")

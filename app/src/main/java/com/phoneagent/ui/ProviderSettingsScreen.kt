@@ -15,12 +15,17 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -37,6 +42,7 @@ import com.phoneagent.agent.AgentController
 import com.phoneagent.providers.CrofAiDefaults
 import com.phoneagent.providers.ProviderConfig
 import com.phoneagent.providers.ProviderType
+import com.phoneagent.ui.theme.*
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,6 +60,8 @@ fun ProviderSettingsScreen(
     var baseUrl by remember { mutableStateOf(CrofAiDefaults.BASE_URL) }
     var streamEnabled by remember { mutableStateOf(false) }
     var selectedModel by remember { mutableStateOf("") }
+    var saveMessage by remember { mutableStateOf<String?>(null) }
+    var saveError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(selectedProviderId) {
         val provider = providers.find { it.id == selectedProviderId } ?: providers.firstOrNull() ?: return@LaunchedEffect
@@ -71,10 +79,13 @@ fun ProviderSettingsScreen(
             TopAppBar(
                 title = { Text("Provider Settings") },
                 navigationIcon = {
-                    Button(onClick = onBack) {
-                        Text("Back")
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = OnBackground)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Background, titleContentColor = OnBackground
+                )
             )
         }
     ) { padding ->
@@ -199,23 +210,44 @@ fun ProviderSettingsScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            saveMessage?.let {
+                Text(it, color = Success, style = MaterialTheme.typography.bodySmall)
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+            saveError?.let {
+                Text(it, color = Error, style = MaterialTheme.typography.bodySmall)
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
             Button(
                 onClick = {
+                    if (baseUrl.isBlank() || !baseUrl.startsWith("http")) {
+                        saveError = "Base URL must start with http:// or https://"
+                        saveMessage = null
+                        return@Button
+                    }
                     scope.launch {
-                        val existing = providers.find { it.id == selectedProviderId }
-                        val updatedConfig = ProviderConfig(
-                            id = selectedProviderId,
-                            name = existing?.name ?: CrofAiDefaults.NAME,
-                            type = existing?.type ?: ProviderType.OPENAI_COMPATIBLE,
-                            baseUrl = baseUrl,
-                            apiKey = existing?.apiKey,
-                            defaultModel = selectedModel.ifBlank { null },
-                            availableModels = existing?.availableModels ?: CrofAiDefaults.MODELS,
-                            isEnabled = true,
-                            streamEnabled = streamEnabled
-                        )
-                        providerRepository.saveProvider(updatedConfig)
-                        agentController.storeApiKey(selectedProviderId, apiKey)
+                        try {
+                            val existing = providers.find { it.id == selectedProviderId }
+                            val updatedConfig = ProviderConfig(
+                                id = selectedProviderId,
+                                name = existing?.name ?: CrofAiDefaults.NAME,
+                                type = existing?.type ?: ProviderType.OPENAI_COMPATIBLE,
+                                baseUrl = baseUrl,
+                                apiKey = null,
+                                defaultModel = selectedModel.ifBlank { null },
+                                availableModels = existing?.availableModels ?: CrofAiDefaults.MODELS,
+                                isEnabled = true,
+                                streamEnabled = streamEnabled
+                            )
+                            providerRepository.saveProvider(updatedConfig)
+                            agentController.storeApiKey(selectedProviderId, apiKey)
+                            saveMessage = "Settings saved"
+                            saveError = null
+                        } catch (e: Exception) {
+                            saveError = e.message ?: "Save failed"
+                            saveMessage = null
+                        }
                     }
                 },
                 enabled = selectedProviderId.isNotBlank(),

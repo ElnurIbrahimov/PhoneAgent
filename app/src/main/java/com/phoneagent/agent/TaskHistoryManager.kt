@@ -83,4 +83,12 @@ class TaskHistoryManager(private val memoryRepository: MemoryRepository) {
             Log.e("TaskHistoryManager", "Failed to clear history", e)
         }
     }
+
+    suspend fun recordMessage(userMessage: String, assistantMessage: String, model: String) {
+        try {
+            memoryRepository.insertMessage(userMessage, assistantMessage, model)
+        } catch (e: Exception) {
+            Log.e("TaskHistoryManager", "Failed to record message", e)
+        }
+    }
 }

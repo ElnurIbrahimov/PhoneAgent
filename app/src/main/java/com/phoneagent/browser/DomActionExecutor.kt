@@ -6,8 +6,19 @@ import org.json.JSONObject
 
 object DomActionExecutor {
 
+    private fun sanitizeJsString(input: String): String {
+        return input
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("</script>", "<\\/script>")
+            .replace("</", "<\\/")
+    }
+
     fun clickText(webView: WebView, text: String, callback: ((Boolean, String?) -> Unit)? = null) {
-        val args = JSONArray().apply { put(text) }.toString()
+        val args = JSONArray().apply { put(sanitizeJsString(text)) }.toString()
         val js = """
             (function() {
                 var args = $args;
@@ -47,7 +58,7 @@ object DomActionExecutor {
     }
 
     fun clickSelector(webView: WebView, selector: String, callback: ((Boolean, String?) -> Unit)? = null) {
-        val args = JSONArray().apply { put(selector) }.toString()
+        val args = JSONArray().apply { put(sanitizeJsString(selector)) }.toString()
         val js = """
             (function() {
                 var args = $args;
@@ -69,7 +80,7 @@ object DomActionExecutor {
     }
 
     fun typeIntoSelector(webView: WebView, selector: String, text: String, callback: ((Boolean, String?) -> Unit)? = null) {
-        val args = JSONArray().apply { put(selector); put(text) }.toString()
+        val args = JSONArray().apply { put(sanitizeJsString(selector)); put(sanitizeJsString(text)) }.toString()
         val js = """
             (function() {
                 var args = $args;
@@ -97,7 +108,7 @@ object DomActionExecutor {
     }
 
     fun typeIntoFocused(webView: WebView, text: String, callback: ((Boolean, String?) -> Unit)? = null) {
-        val args = JSONArray().apply { put(text) }.toString()
+        val args = JSONArray().apply { put(sanitizeJsString(text)) }.toString()
         val js = """
             (function() {
                 var args = $args;

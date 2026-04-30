@@ -46,6 +46,8 @@ fun AgentWebView(
                     loadWithOverviewMode = true
                     allowFileAccess = false
                     allowContentAccess = false
+                    safeBrowsingEnabled = true
+                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 }
 
                 webViewClient = object : WebViewClient() {

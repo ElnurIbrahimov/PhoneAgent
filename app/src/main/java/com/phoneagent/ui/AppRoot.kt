@@ -55,7 +55,8 @@ fun AppRoot(agentController: AgentController) {
                 agentController = agentController,
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToPermissions = { navController.navigate("permissions") },
-                onNavigateToChat = { navController.navigate("chat") }
+                onNavigateToChat = { navController.navigate("chat") },
+                onNavigateToHistory = { navController.navigate("history") }
             )
         }
         composable(
@@ -92,6 +93,18 @@ fun AppRoot(agentController: AgentController) {
             popExitTransition = { PhoneAgentPopExitTransition }
         ) {
             ChatScreen(
+                agentController = agentController,
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            "history",
+            enterTransition = { PhoneAgentEnterTransition },
+            exitTransition = { PhoneAgentExitTransition },
+            popEnterTransition = { PhoneAgentPopEnterTransition },
+            popExitTransition = { PhoneAgentPopExitTransition }
+        ) {
+            TaskHistoryScreen(
                 agentController = agentController,
                 onBack = { navController.popBackStack() }
             )

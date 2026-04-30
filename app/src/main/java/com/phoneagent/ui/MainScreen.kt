@@ -30,7 +30,8 @@ fun MainScreen(
     agentController: AgentController,
     onNavigateToSettings: () -> Unit,
     onNavigateToPermissions: () -> Unit,
-    onNavigateToChat: () -> Unit
+    onNavigateToChat: () -> Unit,
+    onNavigateToHistory: () -> Unit
 ) {
     val context = LocalContext.current
     var overlayRunning by remember { mutableStateOf(OverlayService.isRunning) }
@@ -115,6 +116,13 @@ fun MainScreen(
                     subtitle = "Manage access",
                     gradient = null,
                     onClick = onNavigateToPermissions
+                ),
+                ActionCardData(
+                    icon = Icons.Default.History,
+                    title = "Task History",
+                    subtitle = "View past agent tasks",
+                    gradient = null,
+                    onClick = onNavigateToHistory
                 )
             )
 

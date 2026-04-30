@@ -18,6 +18,9 @@ class AccessibilityTapTextTool : Tool, DescribableTool {
             if (service.findAndTap(text)) ToolResult.success(name, "Tapped: $text")
             else ToolResult.error(name, "Element with text '$text' not found.",
                 "Use accessibility.read_tree to see available elements on screen.")
+        } catch (e: RuntimeException) {
+            ToolResult.error(name, "Accessibility service disconnected. Ask the user to re-enable it.",
+                "The accessibility service may have been stopped by the system.")
         } catch (e: Exception) {
             ToolResult.error(name, e.message ?: "Tap failed",
                 "Use accessibility.read_tree to check the current screen state.")
@@ -42,6 +45,9 @@ class AccessibilityTapAtTool : Tool, DescribableTool {
             if (service.tapAt(x, y)) ToolResult.success(name, "Tapped at ($x, $y)")
             else ToolResult.error(name, "Tap at ($x, $y) failed.",
                 "Check if coordinates are within screen bounds.")
+        } catch (e: RuntimeException) {
+            ToolResult.error(name, "Accessibility service disconnected. Ask the user to re-enable it.",
+                "The accessibility service may have been stopped by the system.")
         } catch (e: Exception) {
             ToolResult.error(name, e.message ?: "Tap failed",
                 "Use accessibility.read_tree to check the current screen state.")

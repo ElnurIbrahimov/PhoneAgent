@@ -131,7 +131,7 @@ fun OverlayChatContent(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(uiState.messages) { msg ->
+                        items(uiState.messages, key = { it.id }) { msg ->
                             MessageBubble(message = msg)
                         }
                     }
