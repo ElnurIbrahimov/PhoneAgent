@@ -143,6 +143,14 @@ class AgentAccessibilityService : AccessibilityService() {
         return pkg
     }
 
+    fun isForegroundPackageDenied(): Boolean {
+        return AppSafetyPolicy.isPackageDenied(getForegroundPackage())
+    }
+
+    fun getDenyReason(): String? {
+        return AppSafetyPolicy.getDenyReason(getForegroundPackage())
+    }
+
     private fun findNodeByText(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
         if (node.text?.toString()?.contains(text, ignoreCase = true) == true ||
             node.contentDescription?.toString()?.contains(text, ignoreCase = true) == true) {

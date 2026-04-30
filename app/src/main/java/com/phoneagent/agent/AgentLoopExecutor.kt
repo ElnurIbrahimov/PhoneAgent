@@ -1,6 +1,7 @@
 package com.phoneagent.agent
 
 import com.phoneagent.agent.tools.ToolResult
+import com.phoneagent.perception.OcrManager
 import com.phoneagent.providers.AiProvider
 import com.phoneagent.providers.ProviderError
 import com.phoneagent.perception.ScreenCaptureManager
@@ -19,6 +20,7 @@ class AgentLoopExecutor(
     private val taskHistoryManager: TaskHistoryManager,
     private val applyState: ((AgentUiState) -> AgentUiState) -> Unit,
     private val screenCaptureManager: ScreenCaptureManager? = null,
+    private val ocrManager: OcrManager? = null,
     private val onSpeak: ((String) -> Unit)? = null
 ) {
 
@@ -104,23 +106,33 @@ class AgentLoopExecutor(
                 "browser.click_selector", "accessibility.type")
             val lastStep = steps.lastOrNull()
             val uiChanged = lastStep?.action is AgentAction.ToolCall && lastStep.action.tool in uiModifyingTools
-            val shouldSendScreenshot = (stepsTaken <= 1) || uiChanged || (stepsTaken % 3 == 0)
+            val shouldCapture = (stepsTaken <= 1) || uiChanged || (stepsTaken % 3 == 0)
+            val needsImage = (stepsTaken <= 1) || uiChanged
 
-            val visionPayload = if (shouldSendScreenshot) {
+            var ocrText: String? = null
+            var visionPayload: String? = null
+
+            if (shouldCapture) {
                 try {
                     val bytes = screenCaptureManager?.captureScreenshot()
                     if (bytes != null) {
-                        val encoder = VisionPayloadBuilder()
-                        encoder.buildVisionContextPayload(
-                            VisionPayloadBuilder.encodeImage(bytes),
-                            "User request: $message"
-                        )
-                    } else null
-                } catch (_: Exception) { null }
-            } else null
+                        ocrText = ocrManager?.recognizeText(bytes)?.take(4000)
+                        if (needsImage) {
+                            visionPayload = VisionPayloadBuilder().buildVisionContextPayload(
+                                VisionPayloadBuilder.encodeImage(bytes),
+                                "User request: $message\n\nOCR text from screen: ${ocrText?.take(2000) ?: "none"}"
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            val augmentedMessage = if (ocrText != null && visionPayload == null) {
+                "$loopMessage\n\n[Screen OCR]: $ocrText"
+            } else loopMessage
 
             val request = AgentRequest(
-                message = loopMessage,
+                message = augmentedMessage,
                 model = model,
                 systemPrompt = systemPrompt,
                 temperature = 0.3,
@@ -198,6 +210,13 @@ class AgentLoopExecutor(
                             agentStepStatus = if (parsed.success) "Tool succeeded" else "Tool failed: ${parsed.error?.take(120)}",
                             currentSteps = steps.toList()
                         )
+                    }
+
+                    val dangerWarning = DestructiveActionDetector.assessSequence(steps)
+                    if (dangerWarning != null) {
+                        applyState {
+                            it.copy(agentStepStatus = "Warning: $dangerWarning")
+                        }
                     }
                 }
                 is AgentAction.ParseError -> {

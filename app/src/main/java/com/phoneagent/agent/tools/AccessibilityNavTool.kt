@@ -12,6 +12,11 @@ class AccessibilityBackTool : Tool, DescribableTool {
         return try {
             val service = AgentAccessibilityService.instance
                 ?: return ToolResult.error(name, "Accessibility service not running.")
+            if (service.isForegroundPackageDenied()) {
+                return ToolResult.error(name,
+                    service.getDenyReason() ?: "Access to this app is restricted.",
+                    "This app is protected from AI interaction. Switch to a different app.")
+            }
             if (service.pressBack()) ToolResult.success(name, "Pressed back.") else ToolResult.error(name, "Back failed.")
         } catch (e: RuntimeException) {
             ToolResult.error(name, "Accessibility service disconnected. Ask the user to re-enable it.",
@@ -31,6 +36,11 @@ class AccessibilityHomeTool : Tool, DescribableTool {
         return try {
             val service = AgentAccessibilityService.instance
                 ?: return ToolResult.error(name, "Accessibility service not running.")
+            if (service.isForegroundPackageDenied()) {
+                return ToolResult.error(name,
+                    service.getDenyReason() ?: "Access to this app is restricted.",
+                    "This app is protected from AI interaction. Switch to a different app.")
+            }
             if (service.pressHome()) ToolResult.success(name, "Pressed home.") else ToolResult.error(name, "Home failed.")
         } catch (e: RuntimeException) {
             ToolResult.error(name, "Accessibility service disconnected. Ask the user to re-enable it.",

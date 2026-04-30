@@ -13,6 +13,11 @@ class AccessibilityReadTreeTool : Tool, DescribableTool {
             val service = AgentAccessibilityService.instance
                 ?: return ToolResult.error(name, "Accessibility service not running. Enable it in Settings > Accessibility.",
                     "Tell the user to enable it in Settings > Accessibility > PhoneAgent")
+            if (service.isForegroundPackageDenied()) {
+                return ToolResult.error(name,
+                    service.getDenyReason() ?: "Access to this app is restricted.",
+                    "This app is protected from AI interaction. Switch to a different app.")
+            }
             val tree = service.readUITree()
             ToolResult.success(name, tree)
         } catch (e: RuntimeException) {

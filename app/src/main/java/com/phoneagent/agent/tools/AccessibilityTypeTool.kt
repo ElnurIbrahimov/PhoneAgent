@@ -15,6 +15,11 @@ class AccessibilityTypeTool : Tool, DescribableTool {
             val service = AgentAccessibilityService.instance
                 ?: return ToolResult.error(name, "Accessibility service not running.",
                     "Tell the user to enable the Accessibility Service.")
+            if (service.isForegroundPackageDenied()) {
+                return ToolResult.error(name,
+                    service.getDenyReason() ?: "Access to this app is restricted.",
+                    "This app is protected from AI interaction. Switch to a different app.")
+            }
             if (service.typeText(text)) ToolResult.success(name, "Typed text into focused field.")
             else ToolResult.error(name, "No focused input field found.",
                 "Use accessibility.tap_text to tap an input field first, then try typing.")

@@ -14,6 +14,11 @@ class AccessibilitySwipeTool : Tool, DescribableTool {
             val service = AgentAccessibilityService.instance
                 ?: return ToolResult.error(name, "Accessibility service not running.",
                     "Tell the user to enable the Accessibility Service.")
+            if (service.isForegroundPackageDenied()) {
+                return ToolResult.error(name,
+                    service.getDenyReason() ?: "Access to this app is restricted.",
+                    "This app is protected from AI interaction. Switch to a different app.")
+            }
             val success = when (direction) {
                 "up" -> service.swipeUp()
                 "down" -> service.swipeDown()

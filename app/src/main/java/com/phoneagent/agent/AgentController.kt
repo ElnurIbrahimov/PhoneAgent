@@ -118,6 +118,7 @@ class AgentController(context: Context) {
             taskHistoryManager = taskHistoryManager,
             applyState = { block -> _uiState.update(block) },
             screenCaptureManager = screenCaptureManager,
+            ocrManager = ocrManager,
             onSpeak = { text -> speakResponse(text) }
         )
 

@@ -15,6 +15,11 @@ class AccessibilityTapTextTool : Tool, DescribableTool {
             val service = AgentAccessibilityService.instance
                 ?: return ToolResult.error(name, "Accessibility service not running.",
                     "Tell the user to enable the Accessibility Service.")
+            if (service.isForegroundPackageDenied()) {
+                return ToolResult.error(name,
+                    service.getDenyReason() ?: "Access to this app is restricted.",
+                    "This app is protected from AI interaction. Switch to a different app.")
+            }
             if (service.findAndTap(text)) ToolResult.success(name, "Tapped: $text")
             else ToolResult.error(name, "Element with text '$text' not found.",
                 "Use accessibility.read_tree to see available elements on screen.")
@@ -42,6 +47,11 @@ class AccessibilityTapAtTool : Tool, DescribableTool {
             val service = AgentAccessibilityService.instance
                 ?: return ToolResult.error(name, "Accessibility service not running.",
                     "Tell the user to enable the Accessibility Service.")
+            if (service.isForegroundPackageDenied()) {
+                return ToolResult.error(name,
+                    service.getDenyReason() ?: "Access to this app is restricted.",
+                    "This app is protected from AI interaction. Switch to a different app.")
+            }
             if (service.tapAt(x, y)) ToolResult.success(name, "Tapped at ($x, $y)")
             else ToolResult.error(name, "Tap at ($x, $y) failed.",
                 "Check if coordinates are within screen bounds.")
