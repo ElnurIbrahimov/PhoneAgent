@@ -20,8 +20,7 @@ import com.phoneagent.agent.tools.PhoneSendSmsTool
 import com.phoneagent.agent.tools.PhoneSettingsTool
 import com.phoneagent.agent.tools.PhoneSystemInfoTool
 import com.phoneagent.browser.BrowserTool
-import com.phoneagent.iris.IrisProfile
-import com.phoneagent.iris.IrisRouter
+import com.phoneagent.kira.KiraBridge
 import com.phoneagent.memory.AppDatabase
 import com.phoneagent.memory.MemoryRepository
 import com.phoneagent.perception.OcrManager
@@ -87,7 +86,9 @@ class AgentController(context: Context) {
     val lpmManager = LpmManager(database.lpmDao())
     val memScenesEngine = MemScenesEngine(database.memSceneDao(), memoryEngine)
     val somaContextBuilder = SomaContextBuilder(lpmManager, beliefEngine, memoryEngine)
-    val irisRouter = IrisRouter()
+    val irisRouter = com.phoneagent.iris.IrisRouter()
+
+    val kiraBridge = KiraBridge()
 
     private var currentSessionId: String = UUID.randomUUID().toString()
     private var sessionMessages: MutableList<String> = mutableListOf()
@@ -170,14 +171,27 @@ class AgentController(context: Context) {
 
         sessionMessages.add("User: $message")
 
+        // pre-fetch routing + context from Kira (non-blocking, update UI later)
+        var routingTemp = 0.5
+        var routingStyle: String? = null
+        var routingProfile = "thinking"
+
         scope.launch {
             try {
-                val state = irisRouter.classifyState(message, tensionScore = 0.5f, energyScore = 0.6f)
-                val profile = irisRouter.selectProfile(state)
-                irisRouter.recordDecision(state, profile)
-
-                val extendedModel = resolveModelForProfile(selectedModel, profile)
-                _uiState.update { it.copy(currentModel = extendedModel, agentStepStatus = "${profile.name} mode") }
+                if (kiraBridge.isAvailable()) {
+                    val routing = kiraBridge.getIrisRouting(message)
+                    routingTemp = routing.temperature
+                    routingStyle = routing.styleInjection
+                    routingProfile = routing.profile
+                    _uiState.update { it.copy(agentStepStatus = "${routingProfile} mode") }
+                } else {
+                    val iris = com.phoneagent.iris.IrisRouter()
+                    val state = iris.classifyState(message, 0.5f, 0.6f)
+                    val profile = iris.selectProfile(state)
+                    routingTemp = profile.temperature
+                    routingProfile = profile.name
+                    _uiState.update { it.copy(agentStepStatus = "${profile.name} mode") }
+                }
             } catch (_: Exception) {}
         }
 
@@ -199,12 +213,23 @@ class AgentController(context: Context) {
 
         scope.launch {
             try {
-                val somaCtx = somaContextBuilder.buildSomaContext(message)
-                val augmentedPrompt = "$systemPrompt\n\n$somaCtx"
+                // try Kira context first, fall back to local Soma
+                val context = if (kiraBridge.isAvailable()) {
+                    kiraBridge.getContext(message).context
+                } else {
+                    somaContextBuilder.buildSomaContext(message)
+                }
+
+                val augmentedPrompt = if (context.isNotBlank()) {
+                    "$systemPrompt\n\n$context"
+                } else systemPrompt
+
                 loopExecutor.startLoop(
                     message = message,
                     model = selectedModel,
                     systemPrompt = augmentedPrompt,
+                    temperature = routingTemp,
+                    styleInjection = routingStyle,
                     onComplete = { loopRunning.set(false) }
                 )
             } catch (_: Exception) {
@@ -222,42 +247,46 @@ class AgentController(context: Context) {
         try {
             sessionMessages.add("Assistant: $answer")
 
-            beliefEngine.observe("pattern", "Last conversation topic: ${sessionMessages.last().take(100)}")
-
-            memoryEngine.store(
-                content = sessionMessages.last().take(500),
-                emotionalWeight = 0.6f,
-                sourceType = "conversation"
-            )
-
-            memScenesEngine.clusterSessionMemories(
-                sessionId = currentSessionId,
-                recentMemories = sessionMessages.takeLast(10)
-            ) { prompt ->
-                try {
-                    val provider = modelRouter.getDefaultProvider()
-                    val request = AgentRequest(
-                        message = prompt,
-                        model = provider.config.defaultModel ?: "deepseek-v4-pro",
-                        systemPrompt = "You analyze conversation memories. Respond ONLY with valid JSON array.",
-                        temperature = 0.3
-                    )
-                    provider.chatCompletion(request).content
-                } catch (_: Exception) { "[]" }
+            if (kiraBridge.isAvailable()) {
+                val messages = sessionMessages.map { it ->
+                    val colon = it.indexOf(':')
+                    if (colon > 0) {
+                        it.substring(0, colon) to it.substring(colon + 1).trim()
+                    } else "unknown" to it
+                }
+                kiraBridge.postSessionDone(messages)
+            } else {
+                // fallback: local Soma (less reliable, but works offline)
+                beliefEngine.observe("pattern", "Last conversation topic: ${sessionMessages.last().take(100)}")
+                memoryEngine.store(
+                    content = sessionMessages.last().take(500),
+                    emotionalWeight = 0.6f,
+                    sourceType = "conversation"
+                )
+                memScenesEngine.clusterSessionMemories(
+                    sessionId = currentSessionId,
+                    recentMemories = sessionMessages.takeLast(10)
+                ) { prompt ->
+                    try {
+                        val provider = modelRouter.getDefaultProvider()
+                        val request = AgentRequest(
+                            message = prompt,
+                            model = provider.config.defaultModel ?: "deepseek-v4-pro",
+                            systemPrompt = "You analyze conversation memories. Respond ONLY with valid JSON array.",
+                            temperature = 0.3
+                        )
+                        provider.chatCompletion(request).content
+                    } catch (_: Exception) { "[]" }
+                }
+                lpmManager.updateFromSession(
+                    newProfile = sessionMessages.takeLast(6).joinToString("\n"),
+                    foresightSignals = listOf("Session completed: ${System.currentTimeMillis()}")
+                )
             }
-
-            lpmManager.updateFromSession(
-                newProfile = sessionMessages.takeLast(6).joinToString("\n"),
-                foresightSignals = listOf("Session completed: ${System.currentTimeMillis()}")
-            )
 
             sessionMessages.clear()
             currentSessionId = UUID.randomUUID().toString()
         } catch (_: Exception) {}
-    }
-
-    private fun resolveModelForProfile(baseModel: String, profile: IrisProfile): String {
-        return baseModel
     }
 
     fun approvePendingAction() {

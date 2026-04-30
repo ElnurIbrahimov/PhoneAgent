@@ -36,6 +36,8 @@ class AgentLoopExecutor(
         message: String,
         model: String,
         systemPrompt: String,
+        temperature: Double = 0.5,
+        styleInjection: String? = null,
         initialSteps: MutableList<AgentStep> = mutableListOf(),
         onComplete: () -> Unit = {}
     ) {
@@ -53,9 +55,13 @@ class AgentLoopExecutor(
             val taskId = taskHistoryManager.recordTask(message, "running")
             val steps = initialSteps.toMutableList()
 
+            val fullSystemPrompt = if (styleInjection != null) {
+                "$systemPrompt\n\n$styleInjection"
+            } else systemPrompt
+
             try {
                 val providers = modelRouter.getAllProvidersForModel(model)
-                executeSteps(providers, taskId, message, model, systemPrompt, steps, onComplete)
+                executeSteps(providers, taskId, message, model, fullSystemPrompt, temperature, steps, onComplete)
             } catch (e: ProviderError) {
                 val message = when (e) {
                     is com.phoneagent.providers.ProviderError.AuthenticationError ->
@@ -88,6 +94,7 @@ class AgentLoopExecutor(
         message: String,
         model: String,
         systemPrompt: String,
+        temperature: Double,
         steps: MutableList<AgentStep>,
         onComplete: () -> Unit,
         startStepNumber: Int = 0
@@ -136,7 +143,7 @@ class AgentLoopExecutor(
                 message = augmentedMessage,
                 model = model,
                 systemPrompt = systemPrompt,
-                temperature = 0.3,
+                temperature = temperature,
                 stream = false,
                 visionPayload = visionPayload
             )
@@ -189,7 +196,8 @@ class AgentLoopExecutor(
                             userRequest = message,
                             stepsSoFar = steps.toList(),
                             systemPrompt = systemPrompt,
-                            selectedModel = model
+                            selectedModel = model,
+                            temperature = temperature
                         )
                         steps.add(AgentStep(stepsTaken, action, observation = ToolResult.error(action.tool, "Waiting for user confirmation.", "Approve or deny the pending action to continue.")))
                         applyState {
@@ -277,7 +285,7 @@ class AgentLoopExecutor(
 
             try {
                 val providers = modelRouter.getAllProvidersForModel(pending.selectedModel)
-                executeSteps(providers, pending.taskId, pending.userRequest, pending.selectedModel, pending.systemPrompt, steps, onComplete, steps.size)
+                executeSteps(providers, pending.taskId, pending.userRequest, pending.selectedModel, pending.systemPrompt, pending.temperature, steps, onComplete, steps.size)
             } catch (e: ProviderError) {
                 val message = when (e) {
                     is com.phoneagent.providers.ProviderError.AuthenticationError ->
