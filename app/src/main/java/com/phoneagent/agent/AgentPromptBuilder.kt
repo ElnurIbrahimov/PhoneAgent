@@ -1,6 +1,7 @@
 package com.phoneagent.agent
 
 import org.json.JSONObject
+import java.util.UUID
 
 object AgentPromptBuilder {
 
@@ -188,6 +189,42 @@ Rules:
         } catch (e: Exception) {
             android.util.Log.w("AgentPromptBuilder", "Failed to parse step observation: ${e.message}")
             null
+        }
+    }
+
+    fun parseSessionReflection(content: String): com.phoneagent.worldmodel.SessionReflection {
+        return try {
+            val json = org.json.JSONObject(content)
+            SessionReflection(
+                sessionId = UUID.randomUUID().toString(),
+                whatWentWell = json.optJSONArray("whatWentWell")?.let { arr ->
+                    (0 until arr.length()).map { arr.getString(it) }
+                } ?: emptyList(),
+                whatCouldImprove = json.optJSONArray("whatCouldImprove")?.let { arr ->
+                    (0 until arr.length()).map { arr.getString(it) }
+                } ?: emptyList(),
+                userFrustrations = json.optJSONArray("userFrustrations")?.let { arr ->
+                    (0 until arr.length()).map { arr.getString(it) }
+                } ?: emptyList(),
+                newPreferences = json.optJSONArray("newPreferences")?.let { arr ->
+                    (0 until arr.length()).map { o ->
+                        PreferenceHint(o.getString("category"), o.getString("key"), o.getString("value"))
+                    }
+                } ?: emptyList(),
+                newBeliefs = json.optJSONArray("newBeliefs")?.let { arr ->
+                    (0 until arr.length()).map { o ->
+                        BeliefHint(o.getString("dimension"), o.getString("statement"))
+                    }
+                } ?: emptyList(),
+                memoriesToConsolidate = emptyList(),
+                goalsAchieved = json.optJSONArray("goalsAchieved")?.let { arr ->
+                    (0 until arr.length()).map { arr.getString(it) }
+                } ?: emptyList(),
+                goalsSuggested = emptyList()
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("AgentPromptBuilder", "Failed to parse session reflection: ${e.message}")
+            SessionReflection(sessionId = UUID.randomUUID().toString())
         }
     }
 }

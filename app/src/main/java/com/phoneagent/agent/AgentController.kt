@@ -33,6 +33,7 @@ import com.phoneagent.perception.ScreenCaptureManager
 import com.phoneagent.perception.ScreenCaptureManagerImpl
 import com.phoneagent.perception.VisionPayloadBuilder
 import com.phoneagent.providers.ProviderRepository
+import com.phoneagent.worldmodel.PersonalWorldModel
 import com.phoneagent.security.AndroidKeystoreSecretStore
 import com.phoneagent.security.SecretStore
 import com.phoneagent.soma.BeliefEngine
@@ -59,6 +60,7 @@ import java.util.UUID
 
 class AgentController(context: Context) {
 
+    private val TAG = "AgentController"
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val providerRepository = ProviderRepository(context)
     private val secretStore: SecretStore = AndroidKeystoreSecretStore(context)
@@ -92,10 +94,22 @@ class AgentController(context: Context) {
     val somaContextBuilder = SomaContextBuilder(lpmManager, beliefEngine, memoryEngine)
     val irisRouter = com.phoneagent.iris.IrisRouter()
 
+    val personalWorldModel = PersonalWorldModel(
+        profileDao = database.personalProfileDao(),
+        preferenceDao = database.preferenceDao(),
+        beliefDao = database.beliefDao(),
+        memoryDao = database.memoryDao(),
+        routineDao = database.routineDao(),
+        relationshipDao = database.relationshipDao(),
+        goalDao = database.goalDao(),
+        phoneStateDao = database.phoneStateCacheDao()
+    )
+
     val kiraBridge = KiraBridge()
 
     private var currentSessionId: String = UUID.randomUUID().toString()
     private var sessionMessages: MutableList<String> = mutableListOf()
+    private var sessionSteps: List<AgentStep> = emptyList()
 
     private val connectivityCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -250,20 +264,33 @@ class AgentController(context: Context) {
                     "$systemPrompt\n\n$context"
                 } else systemPrompt
 
+                val onComplete: (List<AgentStep>) -> Unit = { steps ->
+                    sessionSteps = steps
+                    reflectOnSession(steps)
+                    loopRunning.set(false)
+                }
+
                 loopExecutor.startLoop(
                     message = message,
                     model = selectedModel,
                     systemPrompt = augmentedPrompt,
                     temperature = routingTemp,
                     styleInjection = routingStyle,
-                    onComplete = { loopRunning.set(false) }
+                    worldModel = personalWorldModel,
+                    onComplete = onComplete
                 )
             } catch (_: Exception) {
+                val onCompleteFallback: (List<AgentStep>) -> Unit = { steps ->
+                    sessionSteps = steps
+                    reflectOnSession(steps)
+                    loopRunning.set(false)
+                }
                 loopExecutor.startLoop(
                     message = message,
                     model = selectedModel,
                     systemPrompt = systemPrompt,
-                    onComplete = { loopRunning.set(false) }
+                    worldModel = personalWorldModel,
+                    onComplete = onCompleteFallback
                 )
             }
         }
@@ -315,6 +342,45 @@ class AgentController(context: Context) {
         } catch (_: Exception) {}
     }
 
+    private suspend fun reflectOnSession(steps: List<AgentStep>) {
+        try {
+            val stepsJson = steps.takeLast(5).joinToString(", ") { step ->
+                """{"step":${step.stepNumber},"action":"${step.action}","obs":"${step.observation?.take(100) ?: ""}"}"""
+            }
+
+            val prompt = """
+Session completed. Steps taken:
+[$stepsJson]
+
+Generate a SessionReflection JSON:
+{
+  "whatWentWell": ["observation1"],
+  "whatCouldImprove": ["observation1"],
+  "userFrustrations": [],
+  "newPreferences": [],
+  "newBeliefs": [],
+  "memoriesToConsolidate": [],
+  "goalsAchieved": [],
+  "goalsSuggested": []
+}
+""".trimIndent()
+
+            val provider = modelRouter.getDefaultProvider()
+            val request = AgentRequest(
+                message = prompt,
+                model = provider.config.defaultModel ?: "deepseek-v4-pro",
+                systemPrompt = "You analyze agent sessions. Respond ONLY with valid JSON matching the schema.",
+                temperature = 0.3
+            )
+
+            val response = provider.chatCompletion(request)
+            val reflection = AgentPromptBuilder.parseSessionReflection(response.content)
+            personalWorldModel.reflectOnSession(reflection)
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Session reflection failed: ${e.message}")
+        }
+    }
+
     fun approvePendingAction() {
         val pending = _uiState.value.pendingConfirmation ?: return
         _uiState.update { it.copy(pendingConfirmation = null) }
@@ -331,6 +397,7 @@ class AgentController(context: Context) {
                         taskId = pending.taskId
                     )
                 )
+                personalWorldModel.observeBelief("safety", "approves.${pending.toolName}", "user_confirmation")
             } catch (_: Exception) {}
         }
         loopExecutor.resumeAfterConfirmation(pending, approved = true, onComplete = { loopRunning.set(false) })
@@ -352,6 +419,8 @@ class AgentController(context: Context) {
                         taskId = pending.taskId
                     )
                 )
+                personalWorldModel.setPreference("safety_denied", pending.toolName, "true", 0.8f)
+                personalWorldModel.contradictBelief("safety", "approves.${pending.toolName}")
             } catch (_: Exception) {}
         }
         loopExecutor.resumeAfterConfirmation(pending, approved = false, onComplete = { loopRunning.set(false) })
