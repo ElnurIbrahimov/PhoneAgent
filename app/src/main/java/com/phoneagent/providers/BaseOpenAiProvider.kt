@@ -75,6 +75,48 @@ abstract class BaseOpenAiProvider : AiProvider {
         }
     }
 
+    override suspend fun chatCompletionStream(
+        request: AgentRequest,
+        onChunk: (com.phoneagent.streaming.StreamChunk) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        val body = buildRequestBody(request, stream = true)
+        val httpRequest = buildHttpRequest(body)
+
+        try {
+            client.newCall(httpRequest).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw mapHttpError(response.code, response.body?.string() ?: "Unknown error")
+                }
+                val source = response.body?.source() ?: throw ProviderError.UnknownError("Empty response")
+                while (!source.exhausted()) {
+                    val line = source.readUtf8Line() ?: break
+                    val chunk = com.phoneagent.streaming.StreamChunk(
+                        type = com.phoneagent.streaming.ChunkType.TOKEN,
+                        content = line
+                    )
+                    onChunk(chunk)
+                }
+            }
+        } catch (e: IOException) {
+            throw ProviderError.NetworkError(e.message ?: "Network error")
+        }
+    }
+
+    private suspend fun simulateStreaming(
+        content: String,
+        onChunk: (com.phoneagent.streaming.StreamChunk) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        val words = content.split(" ")
+        for (word in words) {
+            onChunk(com.phoneagent.streaming.StreamChunk(
+                com.phoneagent.streaming.ChunkType.TOKEN,
+                "$word "
+            ))
+            kotlinx.coroutines.delay(20)
+        }
+        onChunk(com.phoneagent.streaming.StreamChunk(com.phoneagent.streaming.ChunkType.DONE, ""))
+    }
+
     override fun isAvailable(): Boolean {
         return config.baseUrl.isNotBlank()
     }
