@@ -1,5 +1,7 @@
 package com.phoneagent.agent
 
+import com.phoneagent.worldmodel.PersonalWorldModel
+
 object SafetyGate {
 
     enum class RiskLevel { LOW, MEDIUM, HIGH }
@@ -8,7 +10,8 @@ object SafetyGate {
         val level: RiskLevel,
         val reason: String,
         val toolName: String,
-        val args: Map<String, String>
+        val args: Map<String, String>,
+        val escalationFactors: List<String> = emptyList()
     )
 
     private val lowRiskTools = setOf(
@@ -25,6 +28,11 @@ object SafetyGate {
         "accessibility.tap_text", "accessibility.tap_at", "accessibility.swipe",
         "accessibility.type", "accessibility.back", "accessibility.home",
         "phone.clipboard"
+    )
+
+    private val privacySensitiveTools = setOf(
+        "phone.clipboard", "phone.notifications", "accessibility.read_tree",
+        "browser.type_into_selector", "browser.type_into_focused"
     )
 
     private val sensitiveWordRegex = Regex(
@@ -61,7 +69,11 @@ object SafetyGate {
         "browser.type_into_focused" to { args -> (args["text"]?.length ?: 0) > 200 }
     )
 
-    fun assess(toolName: String, args: Map<String, String>): RiskAssessment {
+    suspend fun assess(
+        toolName: String,
+        args: Map<String, String>,
+        worldModel: PersonalWorldModel? = null
+    ): RiskAssessment {
         if (toolName in lowRiskTools) {
             return RiskAssessment(RiskLevel.LOW, "", toolName, args)
         }
@@ -74,20 +86,59 @@ object SafetyGate {
             val checker = mediumRiskArgs[toolName]
             if (checker != null && checker(args)) {
                 val argsSummary = args.entries.joinToString(", ") { "${it.key}=${it.value.take(60)}" }
-                return RiskAssessment(
+                val baseAssessment = RiskAssessment(
                     RiskLevel.MEDIUM,
                     "Potentially sensitive action: $argsSummary",
                     toolName, args
                 )
+                return escalateIfNeeded(baseAssessment, worldModel)
             }
-            return RiskAssessment(RiskLevel.LOW, "", toolName, args)
+            val baseAssessment = RiskAssessment(RiskLevel.LOW, "", toolName, args)
+            return escalateIfNeeded(baseAssessment, worldModel)
         }
 
         // Unknown tool: default to HIGH risk (fail-safe)
-        return RiskAssessment(
+        val baseAssessment = RiskAssessment(
             RiskLevel.HIGH,
             "Unknown tool '$toolName' requires user confirmation.",
             toolName, args
+        )
+        return escalateIfNeeded(baseAssessment, worldModel)
+    }
+
+    private suspend fun escalateIfNeeded(
+        baseAssessment: RiskAssessment,
+        worldModel: PersonalWorldModel?
+    ): RiskAssessment {
+        if (worldModel == null) return baseAssessment
+
+        val escalationFactors = mutableListOf<String>()
+
+        val profile = worldModel.getProfile()
+        val riskTolerance = profile?.riskTolerance ?: "MEDIUM"
+
+        if (riskTolerance == "LOW" && baseAssessment.level != RiskLevel.LOW) {
+            escalationFactors.add("User has LOW risk tolerance")
+        }
+
+        val deniedToolsPrefs = worldModel.getPreferencesForCategory("safety_denied")
+        if (deniedToolsPrefs.any { it.key == baseAssessment.toolName }) {
+            escalationFactors.add("Tool '$toolName' was previously denied by user")
+        }
+
+        val privacyBelief = worldModel.getBelief("privacy", "concerned")
+        if (privacyBelief > 0.7 && baseAssessment.toolName in privacySensitiveTools) {
+            escalationFactors.add("User has high privacy concern ($privacyBelief) and tool is privacy-sensitive")
+        }
+
+        if (escalationFactors.isEmpty()) return baseAssessment
+
+        return RiskAssessment(
+            level = RiskLevel.HIGH,
+            reason = baseAssessment.reason,
+            toolName = baseAssessment.toolName,
+            args = baseAssessment.args,
+            escalationFactors = escalationFactors
         )
     }
 }

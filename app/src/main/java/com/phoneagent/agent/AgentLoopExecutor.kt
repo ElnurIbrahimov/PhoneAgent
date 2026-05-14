@@ -224,7 +224,7 @@ class AgentLoopExecutor(
                 is AgentAction.ToolCall -> {
                     applyState { it.copy(agentStepStatus = "Calling tool: ${action.tool}", currentSteps = steps.toList()) }
 
-                    val assessment = SafetyGate.assess(action.tool, action.args)
+                    val assessment = SafetyGate.assess(action.tool, action.args, worldModel)
                     if (assessment.level == SafetyGate.RiskLevel.HIGH || assessment.level == SafetyGate.RiskLevel.MEDIUM) {
                         val pending = PendingConfirmation(
                             toolName = action.tool,
