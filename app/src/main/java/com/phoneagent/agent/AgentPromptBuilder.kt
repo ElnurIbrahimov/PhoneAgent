@@ -192,6 +192,59 @@ Rules:
         }
     }
 
+    fun buildPersonalContext(
+        profile: com.phoneagent.worldmodel.PersonalProfileEntity?,
+        activeGoals: List<com.phoneagent.worldmodel.GoalEntity>,
+        relevantMemories: List<com.phoneagent.worldmodel.MemoryEntry>
+    ): String {
+        if (profile == null && activeGoals.isEmpty() && relevantMemories.isEmpty()) {
+            return ""
+        }
+
+        val sb = StringBuilder()
+        sb.appendLine("=== PERSONAL CONTEXT ===")
+
+        profile?.let {
+            it.name?.let { name -> sb.appendLine("User name: $name") }
+            sb.appendLine("Communication style: ${it.communicationStyle}")
+            sb.appendLine("Risk tolerance: ${it.riskTolerance}")
+        }
+
+        if (activeGoals.isNotEmpty()) {
+            sb.appendLine("Active goals:")
+            activeGoals.forEach { goal ->
+                val progressPct = (goal.progress * 100).toInt()
+                sb.appendLine("  - ${goal.description} ($progressPct%)")
+            }
+        }
+
+        if (relevantMemories.isNotEmpty()) {
+            sb.appendLine("Relevant memories:")
+            relevantMemories.forEach { memory ->
+                sb.appendLine("  - ${memory.content}")
+            }
+        }
+
+        sb.appendLine("========================")
+        return sb.toString()
+    }
+
+    fun buildFullSystemPrompt(
+        tools: List<Tool>,
+        profile: com.phoneagent.worldmodel.PersonalProfileEntity?,
+        goals: List<com.phoneagent.worldmodel.GoalEntity>,
+        memories: List<com.phoneagent.worldmodel.MemoryEntry>,
+        contextSection: String?
+    ): String {
+        val personalContext = buildPersonalContext(profile, goals, memories)
+        val basePrompt = buildSystemPrompt(tools)
+        val contextPart = if (personalContext.isNotBlank()) {
+            "\n\n$personalContext"
+        } else ""
+        val extraContextPart = contextSection?.let { "\n\n$it" } ?: ""
+        return "$basePrompt$contextPart$extraContextPart"
+    }
+
     fun parseSessionReflection(content: String): com.phoneagent.worldmodel.SessionReflection {
         return try {
             val json = org.json.JSONObject(content)
