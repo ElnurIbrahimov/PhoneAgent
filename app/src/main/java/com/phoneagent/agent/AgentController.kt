@@ -207,9 +207,7 @@ class AgentController(context: Context) {
         }
 
         val baseSystemPrompt = AgentPromptBuilder.buildSystemPrompt(toolRegistry.listTools())
-        val systemPrompt = if (screenCaptureManager != null) {
-            VisionPayloadBuilder().buildVisionSystemPrompt(baseSystemPrompt)
-        } else baseSystemPrompt
+        val systemPrompt = VisionPayloadBuilder().buildVisionSystemPrompt(baseSystemPrompt)
 
         scope.launch {
             try {

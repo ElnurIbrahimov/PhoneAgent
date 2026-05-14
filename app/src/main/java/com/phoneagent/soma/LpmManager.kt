@@ -24,7 +24,10 @@ class LpmManager(private val lpmDao: LpmDao) {
             behavioral_predictions = JSONArray(predictions.ifEmpty {
                 try { JSONArray(existing.behavioral_predictions).let { arr ->
                     (0 until arr.length()).map { arr.getString(it) }
-                } } catch (_: Exception) { emptyList() }
+                } } catch (e: org.json.JSONException) {
+                    android.util.Log.w("LpmManager", "Malformed behavioral_predictions", e)
+                    emptyList()
+                }
             }).toString(),
             trigger_map = JSONObject(triggerMap.ifEmpty {
                 try {

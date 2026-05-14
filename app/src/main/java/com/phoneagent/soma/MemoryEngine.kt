@@ -28,8 +28,8 @@ class MemoryEngine(private val memoryDao: SomaMemoryDao) {
     }
 
     suspend fun retrieve(query: String, limit: Int = 10): List<SomaMemoryEntity> {
-        val days = decayDays()
-        val results = memoryDao.searchMemories(query, days, limit)
+        val windowDays = 30f
+        val results = memoryDao.searchMemories(query, windowDays, limit)
         results.forEach { memoryDao.activate(it.id) }
         return results
     }
@@ -46,10 +46,5 @@ class MemoryEngine(private val memoryDao: SomaMemoryDao) {
         memoryDao.forget(0.05f)
     }
 
-    private suspend fun decayDays(): Float {
-        val oldest = memoryDao.searchMemories("", 0f, 1).firstOrNull()
-        if (oldest == null) return 0f
-        val daysSince = (System.currentTimeMillis() - oldest.created_at) / (24f * 3600_000)
-        return daysSince.coerceAtMost(30f)
-    }
+    private fun decayDays(): Float = 30f
 }

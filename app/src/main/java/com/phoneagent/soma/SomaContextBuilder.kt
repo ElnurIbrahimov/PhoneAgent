@@ -26,7 +26,9 @@ class SomaContextBuilder(
                 val preds = (0 until predictions.length()).map { predictions.getString(it) }
                 sb.appendLine(preds.joinToString("; "))
             }
-        } catch (_: Exception) {}
+        } catch (e: org.json.JSONException) {
+            android.util.Log.w("SomaContextBuilder", "Failed to parse behavioral predictions", e)
+        }
 
         val relevantMemories = memoryEngine.retrieve(userMessage, limit = 5)
         if (relevantMemories.isNotEmpty()) {

@@ -63,6 +63,7 @@ class AgentLoopExecutor(
                 val providers = modelRouter.getAllProvidersForModel(model)
                 executeSteps(providers, taskId, message, model, fullSystemPrompt, temperature, steps, onComplete)
             } catch (e: ProviderError) {
+                android.util.Log.e("AgentLoopExecutor", "Provider error in startLoop", e)
                 val message = when (e) {
                     is com.phoneagent.providers.ProviderError.AuthenticationError ->
                         "Authentication failed. Check your API key in Settings."
@@ -79,6 +80,7 @@ class AgentLoopExecutor(
                 taskHistoryManager.updateTaskStatus(taskId, "failed", message)
                 onComplete()
             } catch (e: Exception) {
+                android.util.Log.e("AgentLoopExecutor", "Unexpected error in agent loop: ${e.message}", e)
                 val message = e.message ?: "Unexpected error"
                 applyState { it.copy(isLoading = false, agentStepStatus = null, error = message) }
                 taskHistoryManager.recordSteps(taskId, steps)
@@ -132,7 +134,11 @@ class AgentLoopExecutor(
                             )
                         }
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    android.util.Log.e("AgentLoopExecutor", "Screen capture/OCR failed: ${e.message}", e)
+                    ocrText = null
+                    visionPayload = null
+                }
             }
 
             val augmentedMessage = if (ocrText != null && visionPayload == null) {
@@ -159,9 +165,11 @@ class AgentLoopExecutor(
                     break
                 } catch (e: ProviderError) {
                     lastProviderError = e.message
+                    android.util.Log.w("AgentLoopExecutor", "Provider ${p.config.name} failed: ${e.message}")
                     continue
                 } catch (e: Exception) {
                     lastProviderError = e.message
+                    android.util.Log.e("AgentLoopExecutor", "Unexpected error from provider ${p.config.name}", e)
                     continue
                 }
             }
@@ -287,6 +295,7 @@ class AgentLoopExecutor(
                 val providers = modelRouter.getAllProvidersForModel(pending.selectedModel)
                 executeSteps(providers, pending.taskId, pending.userRequest, pending.selectedModel, pending.systemPrompt, pending.temperature, steps, onComplete, steps.size)
             } catch (e: ProviderError) {
+                android.util.Log.e("AgentLoopExecutor", "Provider error in resumeAfterConfirmation", e)
                 val message = when (e) {
                     is com.phoneagent.providers.ProviderError.AuthenticationError ->
                         "Authentication failed. Check your API key in Settings."
@@ -302,6 +311,7 @@ class AgentLoopExecutor(
                 taskHistoryManager.updateTaskStatus(pending.taskId, "failed", message)
                 onComplete()
             } catch (e: Exception) {
+                android.util.Log.e("AgentLoopExecutor", "Unexpected error in resumeAfterConfirmation: ${e.message}", e)
                 applyState { it.copy(isLoading = false, agentStepStatus = null, error = e.message) }
                 taskHistoryManager.updateTaskStatus(pending.taskId, "failed", e.message)
                 onComplete()
@@ -328,7 +338,9 @@ class AgentLoopExecutor(
                 }
             }
         }
-        return ToolResult.error(toolName, lastError ?: "Execution failed after $maxRetries retries", "Try a different approach or report the issue to the user.")
+        return ToolResult.error(toolName, lastError ?: "Execution failed after $maxRetries retries", "Try a different approach or report the issue to the user.").also {
+            android.util.Log.e("AgentExecutor", "Tool $toolName failed after $maxRetries retries: $lastError")
+        }
     }
 
 
