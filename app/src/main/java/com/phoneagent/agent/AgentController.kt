@@ -92,7 +92,7 @@ class AgentController(context: Context) {
     val lpmManager = LpmManager(database.lpmDao())
     val memScenesEngine = MemScenesEngine(database.memSceneDao(), memoryEngine)
     val somaContextBuilder = SomaContextBuilder(lpmManager, beliefEngine, memoryEngine)
-    val irisRouter = com.phoneagent.iris.IrisRouter()
+    val irisRouter = com.phoneagent.iris.IrisRouter(database.routingDecisionDao())
 
     val personalWorldModel = PersonalWorldModel(
         profileDao = database.personalProfileDao(),
@@ -227,12 +227,12 @@ class AgentController(context: Context) {
                     routingProfile = routing.profile
                     _uiState.update { it.copy(agentStepStatus = "${routingProfile} mode") }
                 } else {
-                    val iris = com.phoneagent.iris.IrisRouter()
-                    val state = iris.classifyState(message, 0.5f, 0.6f)
-                    val profile = iris.selectProfile(state)
-                    routingTemp = profile.temperature
-                    routingProfile = profile.name
-                    _uiState.update { it.copy(agentStepStatus = "${profile.name} mode") }
+                    val state = irisRouter.classifyState(message, 0.5f, 0.6f)
+                    val routingDecision = irisRouter.selectProfile(state, personalWorldModel)
+                    routingTemp = routingDecision.temperature
+                    routingProfile = routingDecision.profile.name
+                    routingStyle = routingDecision.style
+                    _uiState.update { it.copy(agentStepStatus = "${routingDecision.profile.name} mode") }
                 }
             } catch (_: Exception) {}
         }
