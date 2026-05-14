@@ -23,16 +23,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.phoneagent.agent.AgentAction
 import com.phoneagent.agent.AgentController
 import com.phoneagent.agent.AgentStep
 import com.phoneagent.agent.ToolResultParser
+import com.phoneagent.streaming.StreamingStatus
 import com.phoneagent.ui.components.ConfirmationDialog
 import com.phoneagent.ui.components.MessageBubble
 import com.phoneagent.ui.components.StatusChip
 import com.phoneagent.ui.components.TypingIndicator
+import com.phoneagent.ui.streaming.MinimizedReasoningBadge
+import com.phoneagent.ui.streaming.ReasoningCard
+import com.phoneagent.ui.streaming.ReasoningCardPosition
+import com.phoneagent.ui.streaming.rememberReasoningCardPosition
+import com.phoneagent.ui.streaming.saveReasoningCardPosition
 import com.phoneagent.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,10 +49,22 @@ fun ChatScreen(
     agentController: AgentController,
     onBack: () -> Unit
 ) {
-    val uiState by agentController.uiState.collectAsState()
+val uiState by agentController.uiState.collectAsState()
     var messageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     var showSteps by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val reasoningCardPosition by rememberReasoningCardPosition(context)
+
+    val streamingState = uiState.streamingState
+    val isReasoningCardVisible = uiState.isReasoningCardVisible
+
+    LaunchedEffect(streamingState?.status) {
+        if (streamingState?.status == StreamingStatus.DONE) {
+            kotlinx.coroutines.delay(5000)
+            agentController.hideReasoningCard()
+        }
+    }
 
     LaunchedEffect(uiState.messages.size, uiState.isLoading) {
         if (uiState.messages.isNotEmpty()) {
@@ -200,12 +220,33 @@ if (uiState.isLoading && uiState.agentStepStatus != null) {
                 )
             }
 
-            uiState.pendingConfirmation?.let { pending ->
+uiState.pendingConfirmation?.let { pending ->
                 ConfirmationDialog(
                     pending = pending,
                     onApprove = { agentController.approvePendingAction() },
                     onCancel = { agentController.cancelPendingAction() }
                 )
+            }
+
+            if (isReasoningCardVisible && streamingState != null) {
+                if (streamingState.status == StreamingStatus.DONE) {
+                    MinimizedReasoningBadge(
+                        state = streamingState,
+                        onExpand = { agentController.showReasoningCard() }
+                    )
+                } else {
+                    ReasoningCard(
+                        state = streamingState,
+                        position = reasoningCardPosition,
+                        onPositionChange = { newPos ->
+                            kotlinx.coroutines.runBlocking {
+                                saveReasoningCardPosition(newPos, context)
+                            }
+                        },
+                        onMinimize = { agentController.minimizeReasoningCard() },
+                        onClose = { agentController.hideReasoningCard() }
+                    )
+                }
             }
         }
     }

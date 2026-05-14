@@ -33,6 +33,7 @@ import com.phoneagent.perception.ScreenCaptureManager
 import com.phoneagent.perception.ScreenCaptureManagerImpl
 import com.phoneagent.perception.VisionPayloadBuilder
 import com.phoneagent.providers.ProviderRepository
+import com.phoneagent.streaming.StreamingState
 import com.phoneagent.worldmodel.PersonalWorldModel
 import com.phoneagent.security.AndroidKeystoreSecretStore
 import com.phoneagent.security.SecretStore
@@ -270,13 +271,16 @@ class AgentController(context: Context) {
                     loopRunning.set(false)
                 }
 
-                loopExecutor.startLoop(
+                loopExecutor.startLoopStream(
                     message = message,
                     model = selectedModel,
                     systemPrompt = augmentedPrompt,
                     temperature = routingTemp,
                     styleInjection = routingStyle,
                     worldModel = personalWorldModel,
+                    onStreamingState = { state ->
+                        _uiState.update { it.copy(streamingState = state, isReasoningCardVisible = state.status != StreamingStatus.DONE) }
+                    },
                     onComplete = onComplete
                 )
             } catch (_: Exception) {
@@ -443,6 +447,18 @@ Generate a SessionReflection JSON:
 
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    fun showReasoningCard() {
+        _uiState.update { it.copy(isReasoningCardVisible = true) }
+    }
+
+    fun hideReasoningCard() {
+        _uiState.update { it.copy(isReasoningCardVisible = false, streamingState = null) }
+    }
+
+    fun minimizeReasoningCard() {
+        _uiState.update { it.copy(isReasoningCardVisible = true) }
     }
 
     suspend fun storeApiKey(providerId: String, apiKey: String) {
