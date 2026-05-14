@@ -1,6 +1,10 @@
 package com.phoneagent.agent
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import com.phoneagent.agent.tools.AccessibilityBackTool
 import com.phoneagent.agent.tools.AccessibilityForegroundTool
 import com.phoneagent.agent.tools.AccessibilityHomeTool
@@ -93,7 +97,31 @@ class AgentController(context: Context) {
     private var currentSessionId: String = UUID.randomUUID().toString()
     private var sessionMessages: MutableList<String> = mutableListOf()
 
+    private val connectivityCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            scope.launch {
+                _uiState.update { it.copy(isOnline = true) }
+            }
+        }
+        override fun onLost(network: Network) {
+            scope.launch {
+                _uiState.update { it.copy(isOnline = false) }
+            }
+        }
+    }
+
     init {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        try {
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            connectivityManager.registerNetworkCallback(request, connectivityCallback)
+            val activeNetwork = connectivityManager.activeNetwork
+            val isConnected = activeNetwork != null
+            _uiState.update { it.copy(isOnline = isConnected) }
+        } catch (_: Exception) {}
+
         val browserTool = BrowserTool(context)
         toolRegistry.registerAll(
             listOf(
@@ -291,6 +319,20 @@ class AgentController(context: Context) {
         val pending = _uiState.value.pendingConfirmation ?: return
         _uiState.update { it.copy(pendingConfirmation = null) }
         loopRunning.set(true)
+        scope.launch {
+            try {
+                database.safetyAuditDao().insert(
+                    com.phoneagent.soma.entities.SafetyAuditEntity(
+                        toolName = pending.toolName,
+                        riskLevel = pending.riskLevel,
+                        riskReason = pending.reason,
+                        argsSummary = pending.args.toString().take(200),
+                        decision = "APPROVED",
+                        taskId = pending.taskId
+                    )
+                )
+            } catch (_: Exception) {}
+        }
         loopExecutor.resumeAfterConfirmation(pending, approved = true, onComplete = { loopRunning.set(false) })
     }
 
@@ -298,6 +340,20 @@ class AgentController(context: Context) {
         val pending = _uiState.value.pendingConfirmation ?: return
         _uiState.update { it.copy(pendingConfirmation = null) }
         loopRunning.set(true)
+        scope.launch {
+            try {
+                database.safetyAuditDao().insert(
+                    com.phoneagent.soma.entities.SafetyAuditEntity(
+                        toolName = pending.toolName,
+                        riskLevel = pending.riskLevel,
+                        riskReason = pending.reason,
+                        argsSummary = pending.args.toString().take(200),
+                        decision = "DENIED",
+                        taskId = pending.taskId
+                    )
+                )
+            } catch (_: Exception) {}
+        }
         loopExecutor.resumeAfterConfirmation(pending, approved = false, onComplete = { loopRunning.set(false) })
     }
 

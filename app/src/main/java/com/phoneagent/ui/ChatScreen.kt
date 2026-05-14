@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.KeyboardVoice
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -156,18 +157,32 @@ fun ChatScreen(
                     }
                 }
 
-                if (uiState.isLoading && uiState.agentStepStatus != null) {
+if (uiState.isLoading && uiState.agentStepStatus != null) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = uiState.agentStepStatus,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = OnSurfaceMuted
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            if (!uiState.isOnline) {
+                                Icon(
+                                    imageVector = Icons.Filled.WifiOff,
+                                    contentDescription = "Offline",
+                                    tint = Error,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                            }
+                            Text(
+                                text = uiState.agentStepStatus,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = OnSurfaceMuted
+                            )
+                        }
                     }
                 }
 

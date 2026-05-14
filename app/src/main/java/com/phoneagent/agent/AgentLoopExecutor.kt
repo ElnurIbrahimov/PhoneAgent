@@ -30,7 +30,30 @@ class AgentLoopExecutor(
         const val MODEL_TIMEOUT_MS = 60_000L
     }
 
+    private val random = java.util.Random()
+
+    private fun retryDelay(attempt: Int, baseMs: Long = 500L): Long {
+        val exponential = baseMs * (1L shl attempt)
+        val jitter = (exponential * 0.2 * random.nextFloat()).toLong()
+        return (exponential + jitter).coerceAtMost(10_000L)
+    }
+
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    private var consecutiveFailures = 0
+    private val CIRCUIT_BREAKER_THRESHOLD = 3
+
+    private fun recordFailure() {
+        consecutiveFailures++
+    }
+
+    private fun recordSuccess() {
+        consecutiveFailures = 0
+    }
+
+    private fun isCircuitOpen(): Boolean {
+        return consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD
+    }
 
     fun startLoop(
         message: String,
@@ -42,6 +65,7 @@ class AgentLoopExecutor(
         onComplete: () -> Unit = {}
     ) {
         scope.launch {
+            consecutiveFailures = 0
             applyState {
                 it.copy(
                     isLoading = true,
@@ -200,6 +224,7 @@ class AgentLoopExecutor(
                             toolName = action.tool,
                             args = action.args,
                             reason = assessment.reason,
+                            riskLevel = assessment.level.name,
                             taskId = taskId,
                             userRequest = message,
                             stepsSoFar = steps.toList(),
@@ -222,6 +247,11 @@ class AgentLoopExecutor(
                     val observation = executeTool(action.tool, action.args)
                     steps.add(AgentStep(stepsTaken, action, observation))
                     val parsed = ToolResultParser.parse(observation)
+                    if (parsed.success) {
+                        recordSuccess()
+                    } else {
+                        recordFailure()
+                    }
                     applyState {
                         it.copy(
                             agentStepStatus = if (parsed.success) "Tool succeeded" else "Tool failed: ${parsed.error?.take(120)}",
@@ -285,6 +315,12 @@ class AgentLoopExecutor(
                 applyState { it.copy(isLoading = true, agentStepStatus = "Calling tool: ${pending.toolName}", pendingConfirmation = null) }
                 val observation = executeTool(pending.toolName, pending.args)
                 steps.add(AgentStep(steps.size + 1, AgentAction.ToolCall(pending.toolName, pending.args), observation))
+                val parsed = ToolResultParser.parse(observation)
+                if (parsed.success) {
+                    recordSuccess()
+                } else {
+                    recordFailure()
+                }
             } else {
                 val cancelObs = ToolResult.error(pending.toolName, "User canceled the action.", "Consider an alternative approach to complete the task.")
                 steps.add(AgentStep(steps.size + 1, AgentAction.ToolCall(pending.toolName, pending.args), cancelObs))
@@ -320,6 +356,10 @@ class AgentLoopExecutor(
     }
 
     private suspend fun executeTool(toolName: String, args: Map<String, String>): String {
+        if (isCircuitOpen()) {
+            return ToolResult.error(toolName, "Circuit breaker open — tool disabled after $CIRCUIT_BREAKER_THRESHOLD consecutive failures", "Stop the current task and try a different approach.")
+        }
+
         val tool = toolRegistry.getTool(toolName)
             ?: return ToolResult.error(toolName, "Unknown tool: $toolName", "Use only the tools listed in the system prompt.")
 
@@ -334,7 +374,7 @@ class AgentLoopExecutor(
                 lastError = e.message ?: "Execution failed"
                 attempt++
                 if (attempt <= maxRetries) {
-                    delay(500L * (1L shl attempt))
+                    delay(retryDelay(attempt))
                 }
             }
         }

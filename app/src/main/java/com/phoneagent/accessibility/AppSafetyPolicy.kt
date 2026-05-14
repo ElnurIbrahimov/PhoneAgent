@@ -27,9 +27,22 @@ object AppSafetyPolicy {
         "com.android.settings.", "com.google.android.permissioncontroller"
     )
 
+    private val sensitiveKeywords = listOf(
+        "authenticator", "2fa", "otp", "password", "passkey",
+        "bank", "wallet", "pay", "crypto", "coinbase", "binance",
+        "coin.", ".bank", "security"
+    )
+
     fun isPackageDenied(packageName: String?): Boolean {
         if (packageName == null) return false
-        return denylistPrefixes.any { packageName.startsWith(it) }
+        val lower = packageName.lowercase()
+        if (denylistPrefixes.any { lower.startsWith(it) }) return true
+        val parts = lower.split(".")
+        if (parts.size >= 2) {
+            val suffix = ".${parts.last()}"
+            if (suffix in listOf(".bank", ".pay", ".wallet", ".crypto", ".coin")) return true
+        }
+        return sensitiveKeywords.any { lower.contains(it) }
     }
 
     fun getDenyReason(packageName: String?): String? {

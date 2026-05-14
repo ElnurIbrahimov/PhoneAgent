@@ -41,6 +41,7 @@ class ScreenCaptureManagerImpl(private val context: Context) : ScreenCaptureMana
     private var displayWidth = 0
     private var displayHeight = 0
     private var displayDensity = 0
+    private val MAX_CAPTURE_DIM = 1080
     private val handler = Handler(Looper.getMainLooper())
     private val captureMutex = Mutex()
 
@@ -109,14 +110,17 @@ class ScreenCaptureManagerImpl(private val context: Context) : ScreenCaptureMana
                                 val bitmapPadding = if (pixelStride > 0) rowPadding / pixelStride else 0
                                 val bitmap = Bitmap.createBitmap(displayWidth + bitmapPadding, displayHeight, Bitmap.Config.ARGB_8888)
                                 bitmap.copyPixelsFromBuffer(buffer)
-                                val cropped = Bitmap.createBitmap(bitmap, 0, 0, displayWidth, displayHeight)
-                                synchronized(this) { latestBitmap = cropped }
+val cropped = Bitmap.createBitmap(bitmap, 0, 0, displayWidth, displayHeight)
+                                val scaled = scaleBitmap(cropped, MAX_CAPTURE_DIM)
+                                synchronized(this) { latestBitmap = scaled }
                                 bitmap.recycle()
 
                                 val baos = ByteArrayOutputStream()
-                                cropped.compress(Bitmap.CompressFormat.JPEG, 80, baos)
+                                scaled.compress(Bitmap.CompressFormat.JPEG, 85, baos)
                                 val bytes = baos.toByteArray()
                                 baos.close()
+                                cropped.recycle()
+                                if (scaled !== cropped) scaled.recycle()
 
                                 continuation.resume(bytes)
                             } catch (e: Exception) {
@@ -154,5 +158,13 @@ class ScreenCaptureManagerImpl(private val context: Context) : ScreenCaptureMana
 
     companion object {
         const val REQUEST_CODE = 9001
+
+        private fun scaleBitmap(src: Bitmap, maxDim: Int): Bitmap {
+            if (src.width <= maxDim && src.height <= maxDim) return src
+            val scale = minOf(maxDim.toFloat() / src.width, maxDim.toFloat() / src.height)
+            val w = (src.width * scale).toInt()
+            val h = (src.height * scale).toInt()
+            return Bitmap.createScaledBitmap(src, w, h, true)
+        }
     }
 }

@@ -19,5 +19,6 @@ data class AgentUiState(
     val currentProvider: String = "",
     val agentStepStatus: String? = null,
     val currentSteps: List<AgentStep> = emptyList(),
-    val pendingConfirmation: PendingConfirmation? = null
+    val pendingConfirmation: PendingConfirmation? = null,
+    val isOnline: Boolean = true
 )
