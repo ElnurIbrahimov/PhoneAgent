@@ -6,12 +6,14 @@ import com.phoneagent.providers.AiProvider
 import com.phoneagent.providers.ProviderError
 import com.phoneagent.perception.ScreenCaptureManager
 import com.phoneagent.perception.VisionPayloadBuilder
+import com.phoneagent.worldmodel.PersonalWorldModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
 class AgentLoopExecutor(
@@ -62,6 +64,8 @@ class AgentLoopExecutor(
         temperature: Double = 0.5,
         styleInjection: String? = null,
         initialSteps: MutableList<AgentStep> = mutableListOf(),
+        worldModel: PersonalWorldModel? = null,
+        enableWorldModelUpdates: Boolean = true,
         onComplete: () -> Unit = {}
     ) {
         scope.launch {
@@ -85,7 +89,7 @@ class AgentLoopExecutor(
 
             try {
                 val providers = modelRouter.getAllProvidersForModel(model)
-                executeSteps(providers, taskId, message, model, fullSystemPrompt, temperature, steps, onComplete)
+                executeSteps(providers, taskId, message, model, fullSystemPrompt, temperature, steps, onComplete, worldModel, enableWorldModelUpdates)
             } catch (e: ProviderError) {
                 android.util.Log.e("AgentLoopExecutor", "Provider error in startLoop", e)
                 val message = when (e) {
@@ -123,6 +127,8 @@ class AgentLoopExecutor(
         temperature: Double,
         steps: MutableList<AgentStep>,
         onComplete: () -> Unit,
+        worldModel: PersonalWorldModel? = null,
+        enableWorldModelUpdates: Boolean = true,
         startStepNumber: Int = 0
     ) {
         var stepsTaken = startStepNumber
@@ -249,6 +255,9 @@ class AgentLoopExecutor(
                     val parsed = ToolResultParser.parse(observation)
                     if (parsed.success) {
                         recordSuccess()
+                        if (enableWorldModelUpdates && worldModel != null) {
+                            generateAndApplyStepObservation(providers, stepsTaken, action.tool, observation, worldModel)
+                        }
                     } else {
                         recordFailure()
                     }
@@ -307,7 +316,13 @@ class AgentLoopExecutor(
         taskHistoryManager.recordSteps(taskId, steps)
     }
 
-    fun resumeAfterConfirmation(pending: PendingConfirmation, approved: Boolean, onComplete: () -> Unit = {}) {
+    fun resumeAfterConfirmation(
+        pending: PendingConfirmation,
+        approved: Boolean,
+        worldModel: PersonalWorldModel? = null,
+        enableWorldModelUpdates: Boolean = false,
+        onComplete: () -> Unit = {}
+    ) {
         scope.launch {
             val steps = pending.stepsSoFar.toMutableList()
 
@@ -329,7 +344,7 @@ class AgentLoopExecutor(
 
             try {
                 val providers = modelRouter.getAllProvidersForModel(pending.selectedModel)
-                executeSteps(providers, pending.taskId, pending.userRequest, pending.selectedModel, pending.systemPrompt, pending.temperature, steps, onComplete, steps.size)
+                executeSteps(providers, pending.taskId, pending.userRequest, pending.selectedModel, pending.systemPrompt, pending.temperature, steps, onComplete, worldModel, enableWorldModelUpdates, steps.size)
             } catch (e: ProviderError) {
                 android.util.Log.e("AgentLoopExecutor", "Provider error in resumeAfterConfirmation", e)
                 val message = when (e) {
@@ -380,6 +395,55 @@ class AgentLoopExecutor(
         }
         return ToolResult.error(toolName, lastError ?: "Execution failed after $maxRetries retries", "Try a different approach or report the issue to the user.").also {
             android.util.Log.e("AgentExecutor", "Tool $toolName failed after $maxRetries retries: $lastError")
+        }
+    }
+
+    private suspend fun generateAndApplyStepObservation(
+        providers: List<AiProvider>,
+        step: Int,
+        action: String,
+        result: String,
+        worldModel: PersonalWorldModel
+    ) {
+        try {
+            val profile = worldModel.getProfile()
+            val prompt = AgentPromptBuilder.buildStepObservationPrompt(step, action, result, profile)
+
+            val request = AgentRequest(
+                message = prompt,
+                model = providers.firstOrNull()?.config?.model ?: "unknown",
+                systemPrompt = "You are a helpful assistant.",
+                temperature = 0.3,
+                stream = false,
+                visionPayload = null
+            )
+
+            var responseContent: String? = null
+            for (p in providers) {
+                try {
+                    val response = withTimeout(15_000) {
+                        p.chatCompletion(request)
+                    }
+                    responseContent = response.content
+                    break
+                } catch (e: Exception) {
+                    android.util.Log.w("AgentLoopExecutor", "Observation provider ${p.config.name} failed: ${e.message}")
+                    continue
+                }
+            }
+
+            responseContent?.let { content ->
+                val observation = AgentPromptBuilder.parseStepObservation(step, action, result, content)
+                observation?.let {
+                    try {
+                        worldModel.updateFromStepObservation(it)
+                    } catch (e: Exception) {
+                        android.util.Log.e("AgentLoopExecutor", "Failed to update world model: ${e.message}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("AgentLoopExecutor", "Step observation generation failed: ${e.message}")
         }
     }
 

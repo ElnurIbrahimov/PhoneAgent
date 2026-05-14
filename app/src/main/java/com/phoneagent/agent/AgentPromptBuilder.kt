@@ -97,6 +97,99 @@ Rules:
             json.optString("suggestion", null)
         } catch (_: Exception) { null }
     }
+
+    fun buildStepObservationPrompt(
+        step: Int,
+        action: String,
+        result: String,
+        profile: com.phoneagent.worldmodel.PersonalProfileEntity?
+    ): String {
+        val profileContext = profile?.let {
+            """
+            |User Profile:
+            |- Communication style: ${it.communicationStyle}
+            |- Risk tolerance: ${it.riskTolerance}
+            """.trimMargin()
+        } ?: "No user profile available."
+
+        return """
+You are an observer analyzing an agent step. Given the following information:
+
+Step: $step
+Action: $action
+Result: ${result.take(2000)}
+
+$profileContext
+
+Analyze what happened and respond with ONLY a valid JSON object (no markdown, no explanation):
+{
+  "whatILearned": ["list of factual learnings from this step"],
+  "preferenceHint": {"category": "category", "key": "key", "value": "value"} or null,
+  "beliefHint": {"dimension": "dimension", "statement": "statement"} or null,
+  "memoryToStore": {"content": "concise memory content", "importance": 0.5, "emotionalWeight": 0.5, "tags": ["tag1"]} or null
+}
+
+Rules:
+- whatILearned: max 3 items, each under 50 chars
+- preferenceHint: only set if user preference was clearly revealed
+- beliefHint: only set if a clear belief was demonstrated
+- memoryToStore: only set if something worth remembering occurred
+- All fields are optional but object must be valid JSON
+        """.trimIndent()
+    }
+
+    fun parseStepObservation(step: Int, action: String, result: String, jsonString: String): com.phoneagent.worldmodel.StepObservation? {
+        return try {
+            val json = org.json.JSONObject(jsonString)
+
+            val whatILearned = mutableListOf<String>()
+            json.optJSONArray("whatILearned")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val item = arr.getString(i)
+                    if (item.isNotBlank()) whatILearned.add(item.take(50))
+                }
+            }
+
+            val preferenceHint = json.optJSONObject("preferenceHint")?.let { ph ->
+                com.phoneagent.worldmodel.PreferenceHint(
+                    category = ph.optString("category", "general"),
+                    key = ph.optString("key", "unknown"),
+                    value = ph.optString("value", "")
+                )
+            }
+
+            val beliefHint = json.optJSONObject("beliefHint")?.let { bh ->
+                com.phoneagent.worldmodel.BeliefHint(
+                    dimension = bh.optString("dimension", "general"),
+                    statement = bh.optString("statement", "")
+                )
+            }
+
+            val memoryToStore = json.optJSONObject("memoryToStore")?.let { ms ->
+                com.phoneagent.worldmodel.MemoryEntry(
+                    content = ms.optString("content", ""),
+                    importance = ms.optDouble("importance", 0.5).toFloat(),
+                    emotionalWeight = ms.optDouble("emotionalWeight", 0.5).toFloat(),
+                    tags = ms.optJSONArray("tags")?.let { tagsArr ->
+                        (0 until tagsArr.length()).map { tagsArr.getString(it) }
+                    } ?: emptyList()
+                )
+            }
+
+            com.phoneagent.worldmodel.StepObservation(
+                step = step,
+                action = action,
+                result = result,
+                whatILearned = whatILearned,
+                preferenceHint = preferenceHint,
+                beliefHint = beliefHint,
+                memoryToStore = memoryToStore
+            )
+        } catch (e: Exception) {
+            android.util.Log.w("AgentPromptBuilder", "Failed to parse step observation: ${e.message}")
+            null
+        }
+    }
 }
 
 interface DescribableTool {
