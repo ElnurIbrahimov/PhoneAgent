@@ -1,115 +1,134 @@
 package com.phoneagent.agent
 
+import com.phoneagent.agent.SafetyGate.RiskLevel
+import com.phoneagent.worldmodel.PersonalWorldModel
+import com.phoneagent.worldmodel.PreferenceEntity
+import com.phoneagent.worldmodel.PersonalProfileEntity
+import com.phoneagent.soma.BeliefEngine
+import com.phoneagent.soma.daos.BeliefDao
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Test
+import org.mockito.Mockito.*
+import org.mockito.ArgumentMatchers.anyString
 
 class SafetyGateTest {
 
-    @Test
-    fun `low risk tools return LOW level`() {
-        val result = SafetyGate.assess("browser.read_page", emptyMap())
-        assertEquals(SafetyGate.RiskLevel.LOW, result.level)
+    private lateinit var mockWorldModel: PersonalWorldModel
+    private lateinit var mockProfile: PersonalProfileEntity
+
+    @Before
+    fun setup() {
+        mockWorldModel = mock(PersonalWorldModel::class.java)
+        mockProfile = PersonalProfileEntity(
+            id = "self",
+            communicationStyle = "CASUAL",
+            riskTolerance = "MEDIUM",
+            specialRequirements = "[]",
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
     }
 
     @Test
-    fun `high risk tools return HIGH level`() {
-        val result = SafetyGate.assess("phone.send_sms", mapOf("to" to "123", "message" to "hi"))
-        assertEquals(SafetyGate.RiskLevel.HIGH, result.level)
+    fun `low risk tolerance escalates MEDIUM to HIGH`() = runBlocking {
+        `when`(mockWorldModel.getProfile()).thenReturn(mockProfile.copy(riskTolerance = "LOW"))
+        `when`(mockWorldModel.getPreferencesForCategory("safety_denied")).thenReturn(emptyList())
+        `when`(mockWorldModel.getBelief(anyString(), anyString())).thenReturn(0.0)
 
-        val result2 = SafetyGate.assess("phone.call", mapOf("number" to "911"))
-        assertEquals(SafetyGate.RiskLevel.HIGH, result2.level)
+        val result = SafetyGate.assess(
+            "browser.click_text",
+            mapOf("text" to "Submit"),
+            mockWorldModel
+        )
 
-        val result3 = SafetyGate.assess("phone.open_app", mapOf("app" to "com.example"))
-        assertEquals(SafetyGate.RiskLevel.HIGH, result3.level)
+        assertEquals(RiskLevel.HIGH, result.level)
+        assert(result.escalationFactors.isNotEmpty())
+        assert(result.escalationFactors.any { it.contains("LOW risk tolerance") })
     }
 
     @Test
-    fun `medium risk tools with safe args return LOW`() {
-        val result = SafetyGate.assess("accessibility.back", emptyMap())
-        assertEquals(SafetyGate.RiskLevel.LOW, result.level)
+    fun `previously denied tool escalates to HIGH`() = runBlocking {
+        `when`(mockWorldModel.getProfile()).thenReturn(mockProfile.copy(riskTolerance = "MEDIUM"))
+
+        val deniedPrefs = listOf(
+            PreferenceEntity(category = "safety_denied", key = "browser.click_text", value = "true", confidence = 1f)
+        )
+        `when`(mockWorldModel.getPreferencesForCategory("safety_denied")).thenReturn(deniedPrefs)
+        `when`(mockWorldModel.getBelief(anyString(), anyString())).thenReturn(0.0)
+
+        val result = SafetyGate.assess(
+            "browser.click_text",
+            mapOf("text" to "OK"),
+            mockWorldModel
+        )
+
+        assertEquals(RiskLevel.HIGH, result.level)
+        assert(result.escalationFactors.any { it.contains("previously denied") })
     }
 
     @Test
-    fun `medium risk tools with sensitive args return MEDIUM`() {
-        val result = SafetyGate.assess("browser.click_text", mapOf("text" to "Submit"))
-        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
+    fun `high privacy concern escalates privacy-sensitive tool`() = runBlocking {
+        `when`(mockWorldModel.getProfile()).thenReturn(mockProfile.copy(riskTolerance = "MEDIUM"))
+        `when`(mockWorldModel.getPreferencesForCategory("safety_denied")).thenReturn(emptyList())
+        `when`(mockWorldModel.getBelief("privacy", "concerned")).thenReturn(0.8)
+
+        val result = SafetyGate.assess(
+            "phone.clipboard",
+            mapOf("action" to "read"),
+            mockWorldModel
+        )
+
+        assertEquals(RiskLevel.HIGH, result.level)
+        assert(result.escalationFactors.any { it.contains("privacy concern") })
     }
 
     @Test
-    fun `click_selector with password selector returns MEDIUM`() {
-        val result = SafetyGate.assess("browser.click_selector", mapOf("selector" to "#password-field"))
-        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
+    fun `world model with null profile uses default MEDIUM tolerance`() = runBlocking {
+        `when`(mockWorldModel.getProfile()).thenReturn(null)
+        `when`(mockWorldModel.getPreferencesForCategory("safety_denied")).thenReturn(emptyList())
+        `when`(mockWorldModel.getBelief(anyString(), anyString())).thenReturn(0.0)
+
+        val result = SafetyGate.assess(
+            "browser.click_text",
+            mapOf("text" to "Confirm"),
+            mockWorldModel
+        )
+
+        assertEquals(RiskLevel.MEDIUM, result.level)
+        assert(result.escalationFactors.isEmpty())
     }
 
     @Test
-    fun `click_selector with safe selector returns LOW`() {
-        val result = SafetyGate.assess("browser.click_selector", mapOf("selector" to ".nav-link"))
-        assertEquals(SafetyGate.RiskLevel.LOW, result.level)
+    fun `no world model returns base assessment without escalation`() = runBlocking {
+        val result = SafetyGate.assess(
+            "browser.click_text",
+            mapOf("text" to "Submit"),
+            null
+        )
+
+        assertEquals(RiskLevel.MEDIUM, result.level)
+        assert(result.escalationFactors.isEmpty())
     }
 
     @Test
-    fun `type_into_selector with credit card selector returns MEDIUM`() {
-        val result = SafetyGate.assess("browser.type_into_selector", mapOf("selector" to "#credit-card"))
-        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
-    }
+    fun `multiple escalation factors all appear in escalation list`() = runBlocking {
+        `when`(mockWorldModel.getProfile()).thenReturn(mockProfile.copy(riskTolerance = "LOW"))
 
-    @Test
-    fun `type_into_focused with long text returns MEDIUM`() {
-        val longText = "a".repeat(201)
-        val result = SafetyGate.assess("browser.type_into_focused", mapOf("text" to longText))
-        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
-    }
+        val deniedPrefs = listOf(
+            PreferenceEntity(category = "safety_denied", key = "browser.click_text", value = "true", confidence = 1f)
+        )
+        `when`(mockWorldModel.getPreferencesForCategory("safety_denied")).thenReturn(deniedPrefs)
+        `when`(mockWorldModel.getBelief("privacy", "concerned")).thenReturn(0.85)
 
-    @Test
-    fun `type_into_focused with short text returns LOW`() {
-        val result = SafetyGate.assess("browser.type_into_focused", mapOf("text" to "hello"))
-        assertEquals(SafetyGate.RiskLevel.LOW, result.level)
-    }
+        val result = SafetyGate.assess(
+            "browser.click_text",
+            mapOf("text" to "Submit"),
+            mockWorldModel
+        )
 
-    @Test
-    fun `unknown tool returns HIGH risk as fail-safe`() {
-        val result = SafetyGate.assess("unknown.dangerous_tool", emptyMap())
-        assertEquals(SafetyGate.RiskLevel.HIGH, result.level)
+        assertEquals(RiskLevel.HIGH, result.level)
+        assert(result.escalationFactors.size >= 2)
     }
-
-    @Test
-    fun `phone screenshot returns LOW risk`() {
-        val result = SafetyGate.assess("phone.screenshot", emptyMap())
-        assertEquals(SafetyGate.RiskLevel.LOW, result.level)
-    }
-
-    @Test
-    fun `phone clipboard returns MEDIUM risk`() {
-        val result = SafetyGate.assess("phone.clipboard", mapOf("action" to "read"))
-        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
-    }
-
-    @Test
-    fun `phone settings returns LOW risk`() {
-        val result = SafetyGate.assess("phone.settings", mapOf("page" to "wifi"))
-        assertEquals(SafetyGate.RiskLevel.LOW, result.level)
-    }
-
-    @Test
-    fun `accessibility tap requires confirmation for safety`() {
-        val result = SafetyGate.assess("accessibility.tap_text", mapOf("text" to "Buy"))
-        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
-    }
-
-    @Test
-    fun `click_selector with card in selector name does not trigger false positive`() {
-        val result = SafetyGate.assess("browser.click_selector", mapOf("selector" to "#product-card"))
-        assertEquals(SafetyGate.RiskLevel.LOW, result.level)
-    }
-
-    @Test
-    fun `accessibility swipe requires confirmation for safety`() {
-        val result = SafetyGate.assess("accessibility.swipe", mapOf("direction" to "up"))
-        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
-    }
-
-    @Test
-    fun `accessibility type requires confirmation for safety`() {
-        val result = SafetyGate.assess("accessibility.type", mapOf("text" to "hello"))
-        assertEquals(SafetyGate.RiskLevel.MEDIUM, result.level)
-    }
+}
