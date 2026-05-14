@@ -90,11 +90,17 @@ abstract class BaseOpenAiProvider : AiProvider {
                 val source = response.body?.source() ?: throw ProviderError.UnknownError("Empty response")
                 while (!source.exhausted()) {
                     val line = source.readUtf8Line() ?: break
-                    val chunk = com.phoneagent.streaming.StreamChunk(
-                        type = com.phoneagent.streaming.ChunkType.TOKEN,
-                        content = line
-                    )
-                    onChunk(chunk)
+                    if (line.startsWith("data: ")) {
+                        val data = line.substring(6).trim()
+                        if (data == "[DONE]") {
+                            onChunk(com.phoneagent.streaming.StreamChunk(com.phoneagent.streaming.ChunkType.DONE, ""))
+                            break
+                        }
+                        val parsed = StreamingParser.parseChunk(line, config.name)
+                        if (parsed.type != com.phoneagent.streaming.ChunkType.TOKEN || parsed.content.isNotBlank()) {
+                            onChunk(parsed)
+                        }
+                    }
                 }
             }
         } catch (e: IOException) {
