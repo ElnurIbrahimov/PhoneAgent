@@ -6,6 +6,14 @@ import com.phoneagent.providers.AiProvider
 import com.phoneagent.providers.ProviderError
 import com.phoneagent.perception.ScreenCaptureManager
 import com.phoneagent.perception.VisionPayloadBuilder
+import com.phoneagent.streaming.ChunkType
+import com.phoneagent.streaming.ReasoningType
+import com.phoneagent.streaming.ReasoningChunk
+import com.phoneagent.streaming.StreamChunk
+import com.phoneagent.streaming.StreamingState
+import com.phoneagent.streaming.StreamingStatus
+import com.phoneagent.streaming.ToolCallState
+import com.phoneagent.streaming.ToolCallStatus
 import com.phoneagent.worldmodel.PersonalWorldModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -118,7 +126,71 @@ class AgentLoopExecutor(
         }
     }
 
-    private suspend fun executeSteps(
+    fun startLoopStream(
+        message: String,
+        model: String,
+        systemPrompt: String,
+        temperature: Double = 0.5,
+        styleInjection: String? = null,
+        initialSteps: MutableList<AgentStep> = mutableListOf(),
+        worldModel: PersonalWorldModel? = null,
+        enableWorldModelUpdates: Boolean = true,
+        onStreamingState: (StreamingState) -> Unit,
+        onComplete: () -> Unit = {}
+    ) {
+        scope.launch {
+            consecutiveFailures = 0
+            applyState {
+                it.copy(
+                    isLoading = true,
+                    error = null,
+                    agentStepStatus = "Thinking",
+                    currentSteps = emptyList(),
+                    pendingConfirmation = null,
+                    streamingState = StreamingState(),
+                    isReasoningCardVisible = true
+                )
+            }
+
+            val taskId = taskHistoryManager.recordTask(message, "running")
+            val steps = initialSteps.toMutableList()
+
+            val fullSystemPrompt = if (styleInjection != null) {
+                "$systemPrompt\n\n$styleInjection"
+            } else systemPrompt
+
+            try {
+                val providers = modelRouter.getAllProvidersForModel(model)
+                executeStepsStreaming(providers, taskId, message, model, fullSystemPrompt, temperature, steps, onComplete, worldModel, enableWorldModelUpdates, onStreamingState)
+            } catch (e: ProviderError) {
+                android.util.Log.e("AgentLoopExecutor", "Provider error in startLoopStream", e)
+                val errorMessage = when (e) {
+                    is com.phoneagent.providers.ProviderError.AuthenticationError ->
+                        "Authentication failed. Check your API key in Settings."
+                    is com.phoneagent.providers.ProviderError.NetworkError ->
+                        "Network error: ${e.message}. Check your connection and try again."
+                    is com.phoneagent.providers.ProviderError.RateLimitError ->
+                        "Rate limited. Wait a moment and try again."
+                    is com.phoneagent.providers.ProviderError.ServerError ->
+                        "Server error: ${e.message}. The provider may be down."
+                    else -> e.message ?: "Unknown provider error"
+                }
+                applyState { it.copy(isLoading = false, agentStepStatus = null, error = errorMessage, streamingState = StreamingState(status = StreamingStatus.ERROR, error = errorMessage)) }
+                taskHistoryManager.recordSteps(taskId, steps)
+                taskHistoryManager.updateTaskStatus(taskId, "failed", errorMessage)
+                onComplete()
+            } catch (e: Exception) {
+                android.util.Log.e("AgentLoopExecutor", "Unexpected error in startLoopStream: ${e.message}", e)
+                val errorMessage = e.message ?: "Unexpected error"
+                applyState { it.copy(isLoading = false, agentStepStatus = null, error = errorMessage, streamingState = StreamingState(status = StreamingStatus.ERROR, error = errorMessage)) }
+                taskHistoryManager.recordSteps(taskId, steps)
+                taskHistoryManager.updateTaskStatus(taskId, "failed", errorMessage)
+                onComplete()
+            }
+        }
+    }
+
+    private suspend fun executeStepsStreaming(
         providers: List<AiProvider>,
         taskId: String,
         message: String,
@@ -129,14 +201,20 @@ class AgentLoopExecutor(
         onComplete: () -> Unit,
         worldModel: PersonalWorldModel? = null,
         enableWorldModelUpdates: Boolean = true,
-        startStepNumber: Int = 0
+        startStepNumber: Int = 0,
+        onStreamingState: (StreamingState) -> Unit = {}
     ) {
         var stepsTaken = startStepNumber
         var finalContent: String? = null
+        var streamedText = ""
+        var reasoningChunks = mutableListOf<ReasoningChunk>()
+        var currentToolCall: ToolCallState? = null
 
         while (stepsTaken < DEFAULT_MAX_STEPS) {
             stepsTaken++
+            val stepNum = stepsTaken
             applyState { it.copy(agentStepStatus = "Thinking (step $stepsTaken/$DEFAULT_MAX_STEPS)", currentSteps = steps.toList()) }
+            onStreamingState(StreamingState(status = StreamingStatus.THINKING, currentStep = stepNum, streamedText = streamedText, reasoningChunks = reasoningChunks.toList(), toolCallInProgress = currentToolCall))
 
             val loopMessage = AgentPromptBuilder.buildLoopMessage(message, steps)
 
@@ -217,6 +295,9 @@ class AgentLoopExecutor(
             when (action) {
                 is AgentAction.FinalAnswer -> {
                     finalContent = action.content
+                    streamedText = action.content
+                    reasoningChunks.add(ReasoningChunk(ReasoningType.PLAN, "Final answer ready"))
+                    onStreamingState(StreamingState(status = StreamingStatus.DONE, currentStep = stepNum, streamedText = streamedText, reasoningChunks = reasoningChunks.toList(), toolCallInProgress = null))
                     steps.add(AgentStep(stepsTaken, action))
                     applyState { it.copy(agentStepStatus = "Done", currentSteps = steps.toList()) }
                     break
@@ -247,17 +328,25 @@ class AgentLoopExecutor(
                                 isLoading = false
                             )
                         }
+                        currentToolCall = ToolCallState(action.tool, action.args, ToolCallStatus.STARTED)
+                        onStreamingState(StreamingState(status = StreamingStatus.ACTING, currentStep = stepNum, streamedText = streamedText, reasoningChunks = reasoningChunks.toList(), toolCallInProgress = currentToolCall))
                         return
                     }
 
+                    currentToolCall = ToolCallState(action.tool, action.args, ToolCallStatus.EXECUTING)
+                    onStreamingState(StreamingState(status = StreamingStatus.ACTING, currentStep = stepNum, streamedText = streamedText, reasoningChunks = reasoningChunks.toList(), toolCallInProgress = currentToolCall))
                     val observation = executeTool(action.tool, action.args)
                     steps.add(AgentStep(stepsTaken, action, observation))
+                    currentToolCall = ToolCallState(action.tool, action.args, ToolCallStatus.RESULT)
+                    onStreamingState(StreamingState(status = StreamingStatus.OBSERVING, currentStep = stepNum, streamedText = streamedText, reasoningChunks = reasoningChunks.toList(), toolCallInProgress = currentToolCall))
                     val parsed = ToolResultParser.parse(observation)
                     if (parsed.success) {
                         recordSuccess()
                         if (enableWorldModelUpdates && worldModel != null) {
                             generateAndApplyStepObservation(providers, stepsTaken, action.tool, observation, worldModel)
                         }
+                        reasoningChunks.add(ReasoningChunk(ReasoningType.OBSERVATION, "${action.tool}: ${observation.take(200)}"))
+                        streamedText += "\n[${action.tool} result] ${observation.take(200)}\n"
                     } else {
                         recordFailure()
                     }
@@ -298,11 +387,14 @@ class AgentLoopExecutor(
                 agentStepStatus = "Done",
                 error = null,
                 currentSteps = steps.toList(),
-                pendingConfirmation = null
+                pendingConfirmation = null,
+                streamingState = null,
+                isReasoningCardVisible = false
             )
         }
 
         onComplete()
+        onStreamingState(StreamingState(status = StreamingStatus.DONE, currentStep = stepsTaken, streamedText = answer, reasoningChunks = reasoningChunks.toList(), toolCallInProgress = null))
 
         taskHistoryManager.recordMessage(message, answer, model)
         onSessionComplete?.invoke(taskId, answer)
