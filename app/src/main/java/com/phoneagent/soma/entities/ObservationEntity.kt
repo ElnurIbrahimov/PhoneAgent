@@ -11,5 +11,6 @@ data class ObservationEntity(
     val ocr_text_snippet: String = "",
     val activity_classification: String? = null,
     val emotional_tone: String? = null,
+    val step: Int = 0,
     val observed_at: Long = System.currentTimeMillis()
 )
